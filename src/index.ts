@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import cluster, { Worker } from 'cluster'
+import cluster from 'cluster'
 import type { BrowserContext, Cookie, Page } from 'patchright'
 import pkg from '../package.json'
 
@@ -16,6 +16,7 @@ import Utils, { isBrowserClosedError } from './util/Utils'
 import { loadAccounts, loadConfig } from './util/Load'
 import { closeSessionStore } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
+import { runScheduled } from './util/Scheduler'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -101,8 +102,6 @@ export class MicrosoftRewardsBot {
         return (ctx ?? this.fingerprintMobile ?? this.fingerprintDesktop) as BrowserFingerprintWithHeaders
     }
 
-    private activeWorkers: number
-    private exitedWorkers: number[]
     private browserFactory: Browser = new Browser(this)
     private accounts: Account[]
     public workers: Workers
@@ -135,8 +134,6 @@ export class MicrosoftRewardsBot {
             react: new ReactFunc(this)
         }
         this.config = loadConfig()
-        this.activeWorkers = this.config.clusters
-        this.exitedWorkers = []
     }
 
     get isMobile(): boolean {
@@ -190,90 +187,112 @@ export class MicrosoftRewardsBot {
     private async runMaster(runStartTime: number): Promise<void> {
         void this.logger.info('main', 'CLUSTER-PRIMARY', `Primary process started | PID: ${process.pid}`)
 
-        const rawChunks = this.utils.chunkArray(this.accounts, this.config.clusters)
-        const accountChunks = rawChunks.filter(c => c && c.length > 0)
-        this.activeWorkers = accountChunks.length
+        const accounts = [...this.accounts]
+        const maxConcurrent = Math.max(1, Math.min(this.config.clusters, accounts.length))
+
+        void this.logger.info(
+            'main',
+            'SCHEDULER',
+            `Scheduler | accounts=${accounts.length} | maxConcurrent=${maxConcurrent} | shuffle=${this.config.shuffleAccounts ? 'on' : 'off'}`
+        )
 
         const allAccountStats: AccountStats[] = []
         let hadWorkerFailure = false
 
-        for (const chunk of accountChunks) {
-            const worker = cluster.fork()
-            worker.send?.({ chunk, runStartTime })
+        const runOne = (account: Account): Promise<void> =>
+            new Promise<void>(resolve => {
+                const worker = cluster.fork()
+                worker.send?.({ chunk: [account], runStartTime })
 
-            worker.on('message', (msg: { __ipcLog?: IpcLog; __stats?: AccountStats[] }) => {
-                if (msg.__stats) {
-                    allAccountStats.push(...msg.__stats)
-                }
+                let settled = false
 
-                const log = msg.__ipcLog
-                if (log && typeof log.content === 'string') {
-                    const { webhook } = this.config
-                    const { content, level } = log
-
-                    if (webhook.discord?.enabled && webhook.discord.url) {
-                        sendDiscord(webhook.discord.url, content, level)
+                worker.on('message', (msg: { __ipcLog?: IpcLog; __stats?: AccountStats[] }) => {
+                    if (msg.__stats) {
+                        allAccountStats.push(...msg.__stats)
                     }
-                    if (webhook.ntfy?.enabled && webhook.ntfy.url) {
-                        sendNtfy(webhook.ntfy, content, level)
+
+                    const log = msg.__ipcLog
+                    if (log && typeof log.content === 'string') {
+                        const { webhook } = this.config
+                        const { content, level } = log
+
+                        if (webhook.discord?.enabled && webhook.discord.url) {
+                            sendDiscord(webhook.discord.url, content, level)
+                        }
+                        if (webhook.ntfy?.enabled && webhook.ntfy.url) {
+                            sendNtfy(webhook.ntfy, content, level)
+                        }
                     }
-                }
+                })
+
+                worker.on('exit', (code, signal) => {
+                    if (settled) {
+                        return
+                    }
+                    settled = true
+
+                    const failed = (code ?? 0) !== 0 || Boolean(signal)
+                    if (failed) {
+                        hadWorkerFailure = true
+                    }
+
+                    this.logger.warn(
+                        'main',
+                        'CLUSTER-WORKER-EXIT',
+                        `Worker ${worker.process.pid ?? '?'} exit | Code: ${code ?? 'n/a'} | Signal: ${signal ?? 'n/a'}`
+                    )
+
+                    resolve()
+                })
+
+                worker.on('error', (error) => {
+                    if (settled) {
+                        return
+                    }
+                    settled = true
+
+                    hadWorkerFailure = true
+
+                    this.logger.error(
+                        'main',
+                        'CLUSTER-WORKER-ERROR',
+                        `Worker ${worker.process.pid ?? '?'} error | ${error instanceof Error ? error.message : String(error)}`
+                    )
+
+                    resolve()
+                })
             })
 
-            // Startup delay for clusters due to resource usage
-            if (accountChunks.indexOf(chunk) !== accountChunks.length - 1) {
-                await this.utils.wait(5000)
-            }
-        }
-
-        const onWorkerExit = async (worker: Worker, code?: number, signal?: string): Promise<void> => {
-            const { pid } = worker.process
-
-            if (!pid || this.exitedWorkers.includes(pid)) {
-                return
-            }
-
-            this.exitedWorkers.push(pid)
-            this.activeWorkers -= 1
-
-            const failed = (code ?? 0) !== 0 || Boolean(signal)
-            if (failed) {
+        await runScheduled(accounts, account => runOne(account), {
+            maxConcurrent,
+            shuffle: this.config.shuffleAccounts,
+            jitterMs: () => this.utils.randomDelay(this.config.accountStartDelay.min, this.config.accountStartDelay.max),
+            wait: (msDelay: number) => this.utils.wait(msDelay),
+            shuffleArray: <T>(a: T[]): T[] => this.utils.shuffleArray(a),
+            onError: (_item, error) => {
                 hadWorkerFailure = true
-            }
-
-            this.logger.warn(
-                'main',
-                'CLUSTER-WORKER-EXIT',
-                `Worker ${pid} exit | Code: ${code ?? 'n/a'} | Signal: ${signal ?? 'n/a'} | Active workers: ${this.activeWorkers}`
-            )
-
-            if (this.activeWorkers <= 0) {
-                const totalCollectedPoints = allAccountStats.reduce((sum, s) => sum + s.collectedPoints, 0)
-                const totalInitialPoints = allAccountStats.reduce((sum, s) => sum + s.initialPoints, 0)
-                const totalFinalPoints = allAccountStats.reduce((sum, s) => sum + s.finalPoints, 0)
-                const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
-
-                this.logger.info(
+                void this.logger.error(
                     'main',
-                    'RUN-END',
-                    `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
-                    'green'
+                    'SCHEDULER-ERROR',
+                    `Account task error: ${error instanceof Error ? error.message : String(error)}`
                 )
-
-                await flushAllWebhooks()
-
-                process.exit(hadWorkerFailure ? 1 : 0)
             }
-        }
-
-        cluster.on('exit', (worker, code, signal) => {
-            void onWorkerExit(worker, code ?? undefined, signal ?? undefined)
         })
 
-        cluster.on('disconnect', worker => {
-            const pid = worker.process?.pid
-            this.logger.warn('main', 'CLUSTER-WORKER-DISCONNECT', `Worker ${pid ?? '?'} disconnected`)
-        })
+        const totalCollectedPoints = allAccountStats.reduce((sum, s) => sum + s.collectedPoints, 0)
+        const totalInitialPoints = allAccountStats.reduce((sum, s) => sum + s.initialPoints, 0)
+        const totalFinalPoints = allAccountStats.reduce((sum, s) => sum + s.finalPoints, 0)
+        const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
+
+        this.logger.info(
+            'main',
+            'RUN-END',
+            `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+            'green'
+        )
+
+        await flushAllWebhooks()
+        process.exit(hadWorkerFailure ? 1 : 0)
     }
 
     private runWorker(runStartTimeFromMaster?: number): void {
@@ -311,7 +330,17 @@ export class MicrosoftRewardsBot {
     private async runTasks(accounts: Account[], runStartTime: number): Promise<AccountStats[]> {
         const accountStats: AccountStats[] = []
 
-        for (const account of accounts) {
+        const ordered =
+            accounts.length > 1 && this.config.shuffleAccounts ? this.utils.shuffleArray([...accounts]) : accounts
+
+        for (let accountIndex = 0; accountIndex < ordered.length; accountIndex++) {
+            const account = ordered[accountIndex]!
+
+            if (accountIndex > 0) {
+                await this.utils.wait(
+                    this.utils.randomDelay(this.config.accountStartDelay.min, this.config.accountStartDelay.max)
+                )
+            }
             const accountStartTime = Date.now()
             const accountEmail = account.email
             this.userData.userName = this.utils.getEmailUsername(accountEmail)
