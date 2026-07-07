@@ -7,7 +7,7 @@ export interface SchedulerOptions {
     jitterMs: () => number
     /** Espera asíncrona; inyectable para test. */
     wait: (ms: number) => Promise<void>
-    /** Baraja inyectable (para test determinista). Por defecto Fisher-Yates interno. */
+    /** Baraja inyectable (para test determinista). Por defecto Fisher-Yates interno. El scheduler siempre pasa una copia. */
     shuffleArray?: <T>(a: T[]) => T[]
     /** Notifica un fallo de `runOne` sin detener el pool. */
     onError?: (item: unknown, error: unknown) => void
@@ -38,7 +38,7 @@ export async function runScheduled<T>(
     opts: SchedulerOptions
 ): Promise<void> {
     const shuffle = opts.shuffleArray ?? defaultShuffle
-    const queue: Array<{ item: T; index: number }> = (opts.shuffle ? shuffle(items) : [...items]).map(
+    const queue: Array<{ item: T; index: number }> = (opts.shuffle ? shuffle([...items]) : [...items]).map(
         (item, index) => ({ item, index })
     )
 
