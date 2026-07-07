@@ -204,6 +204,8 @@ export class MicrosoftRewardsBot {
                 const worker = cluster.fork()
                 worker.send?.({ chunk: [account], runStartTime })
 
+                let settled = false
+
                 worker.on('message', (msg: { __ipcLog?: IpcLog; __stats?: AccountStats[] }) => {
                     if (msg.__stats) {
                         allAccountStats.push(...msg.__stats)
@@ -224,6 +226,11 @@ export class MicrosoftRewardsBot {
                 })
 
                 worker.on('exit', (code, signal) => {
+                    if (settled) {
+                        return
+                    }
+                    settled = true
+
                     const failed = (code ?? 0) !== 0 || Boolean(signal)
                     if (failed) {
                         hadWorkerFailure = true
@@ -237,6 +244,23 @@ export class MicrosoftRewardsBot {
 
                     resolve()
                 })
+
+                worker.on('error', (error) => {
+                    if (settled) {
+                        return
+                    }
+                    settled = true
+
+                    hadWorkerFailure = true
+
+                    this.logger.error(
+                        'main',
+                        'CLUSTER-WORKER-ERROR',
+                        `Worker ${worker.process.pid ?? '?'} error | ${error instanceof Error ? error.message : String(error)}`
+                    )
+
+                    resolve()
+                })
             })
 
         await runScheduled(accounts, account => runOne(account), {
@@ -245,12 +269,14 @@ export class MicrosoftRewardsBot {
             jitterMs: () => this.utils.randomDelay(this.config.accountStartDelay.min, this.config.accountStartDelay.max),
             wait: (msDelay: number) => this.utils.wait(msDelay),
             shuffleArray: <T>(a: T[]): T[] => this.utils.shuffleArray(a),
-            onError: (_item, error) =>
+            onError: (_item, error) => {
+                hadWorkerFailure = true
                 void this.logger.error(
                     'main',
                     'SCHEDULER-ERROR',
                     `Account task error: ${error instanceof Error ? error.message : String(error)}`
                 )
+            }
         })
 
         const totalCollectedPoints = allAccountStats.reduce((sum, s) => sum + s.collectedPoints, 0)
