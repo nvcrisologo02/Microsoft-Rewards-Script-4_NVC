@@ -107,8 +107,8 @@ function buildProxy(index: string): AccountProxy {
 
 function buildSaveFingerprint(index: string): ConfigSaveFingerprint {
     return {
-        mobile: envBool(`ACCOUNT_${index}_SAVE_FINGERPRINT_MOBILE`, false),
-        desktop: envBool(`ACCOUNT_${index}_SAVE_FINGERPRINT_DESKTOP`, false)
+        mobile: envBool(`ACCOUNT_${index}_SAVE_FINGERPRINT_MOBILE`, true),
+        desktop: envBool(`ACCOUNT_${index}_SAVE_FINGERPRINT_DESKTOP`, true)
     }
 }
 

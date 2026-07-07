@@ -2,6 +2,8 @@ export interface Config {
     sessionPath: string
     headless: boolean
     clusters: number
+    shuffleAccounts: boolean
+    accountStartDelay: ConfigDelay
     errorDiagnostics: boolean
     ensureStreakProtection: boolean
     autoClaimPunchcardRewards: boolean
