@@ -17,6 +17,7 @@ import { loadAccounts, loadConfig } from './util/Load'
 import { closeSessionStore } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
 import { runScheduled } from './util/Scheduler'
+import { formatRunSummary } from './util/RunSummary'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -184,6 +185,26 @@ export class MicrosoftRewardsBot {
         }
     }
 
+    private logRunSummary(stats: AccountStats[], runStartTime: number): void {
+        this.logger.info(
+            'main',
+            'RUN-SUMMARY',
+            '\n' +
+                formatRunSummary(
+                    stats.map(s => ({
+                        email: s.email,
+                        collectedPoints: s.collectedPoints,
+                        finalPoints: s.finalPoints,
+                        durationSeconds: s.duration,
+                        success: s.success
+                    })),
+                    (Date.now() - runStartTime) / 1000
+                ),
+            undefined,
+            { skipWebhook: true }
+        )
+    }
+
     private async runMaster(runStartTime: number): Promise<void> {
         void this.logger.info('main', 'CLUSTER-PRIMARY', `Primary process started | PID: ${process.pid}`)
 
@@ -283,6 +304,8 @@ export class MicrosoftRewardsBot {
         const totalInitialPoints = allAccountStats.reduce((sum, s) => sum + s.initialPoints, 0)
         const totalFinalPoints = allAccountStats.reduce((sum, s) => sum + s.finalPoints, 0)
         const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
+
+        this.logRunSummary(allAccountStats, runStartTime)
 
         this.logger.info(
             'main',
@@ -425,6 +448,8 @@ export class MicrosoftRewardsBot {
             const totalInitialPoints = accountStats.reduce((sum, s) => sum + s.initialPoints, 0)
             const totalFinalPoints = accountStats.reduce((sum, s) => sum + s.finalPoints, 0)
             const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
+
+            this.logRunSummary(accountStats, runStartTime)
 
             this.logger.info(
                 'main',

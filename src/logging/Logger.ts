@@ -47,8 +47,8 @@ function formatMessage(message: string | Error): string {
 export class Logger {
     constructor(private bot: MicrosoftRewardsBot) {}
 
-    info(isMobile: Platform, title: string, message: string, color?: ColorKey) {
-        return this.baseLog('info', isMobile, title, message, color)
+    info(isMobile: Platform, title: string, message: string, color?: ColorKey, options?: { skipWebhook?: boolean }) {
+        return this.baseLog('info', isMobile, title, message, color, options)
     }
 
     warn(isMobile: Platform, title: string, message: string | Error, color?: ColorKey) {
@@ -68,7 +68,8 @@ export class Logger {
         isMobile: Platform,
         title: string,
         message: string | Error,
-        color?: ColorKey
+        color?: ColorKey,
+        options?: { skipWebhook?: boolean }
     ): void {
         const now = new Date().toLocaleString()
         const formatted = formatMessage(message)
@@ -118,7 +119,7 @@ export class Logger {
             consoleOut(level, consoleStr, getColorFn(logColor))
         }
 
-        if (!webhookAllowed) {
+        if (!webhookAllowed || options?.skipWebhook) {
             return
         }
 
