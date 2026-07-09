@@ -18,8 +18,11 @@ test('incluye una fila por cuenta con ganados y total', () => {
 
 test('marca OK y FALLO según success', () => {
     const out = formatRunSummary(rows, 300)
-    assert.ok(out.includes('OK'), 'estado OK')
-    assert.ok(out.includes('FALLO'), 'estado FALLO')
+    const lines = out.split('\n')
+    const okLine = lines.find(l => l.startsWith('pupela_32@outlook.com'))
+    const failLine = lines.find(l => l.startsWith('nvcrisologo02@gmail.com'))
+    assert.ok(okLine && okLine.trimEnd().endsWith('OK'), 'la cuenta con éxito termina en OK')
+    assert.ok(failLine && failLine.trimEnd().endsWith('FALLO'), 'la cuenta fallida termina en FALLO')
 })
 
 test('fila TOTAL: sumas, runtime y recuento k/N OK', () => {
