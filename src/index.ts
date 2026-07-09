@@ -17,6 +17,7 @@ import { loadAccounts, loadConfig } from './util/Load'
 import { closeSessionStore } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
 import { runScheduled } from './util/Scheduler'
+import { formatRunSummary } from './util/RunSummary'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -286,6 +287,22 @@ export class MicrosoftRewardsBot {
 
         this.logger.info(
             'main',
+            'RUN-SUMMARY',
+            '\n' +
+                formatRunSummary(
+                    allAccountStats.map(s => ({
+                        email: s.email,
+                        collectedPoints: s.collectedPoints,
+                        finalPoints: s.finalPoints,
+                        durationSeconds: s.duration,
+                        success: s.success
+                    })),
+                    (Date.now() - runStartTime) / 1000
+                )
+        )
+
+        this.logger.info(
+            'main',
             'RUN-END',
             `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
             'green'
@@ -425,6 +442,22 @@ export class MicrosoftRewardsBot {
             const totalInitialPoints = accountStats.reduce((sum, s) => sum + s.initialPoints, 0)
             const totalFinalPoints = accountStats.reduce((sum, s) => sum + s.finalPoints, 0)
             const totalDurationMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
+
+            this.logger.info(
+                'main',
+                'RUN-SUMMARY',
+                '\n' +
+                    formatRunSummary(
+                        accountStats.map(s => ({
+                            email: s.email,
+                            collectedPoints: s.collectedPoints,
+                            finalPoints: s.finalPoints,
+                            durationSeconds: s.duration,
+                            success: s.success
+                        })),
+                        (Date.now() - runStartTime) / 1000
+                    )
+            )
 
             this.logger.info(
                 'main',
