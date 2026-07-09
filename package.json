@@ -21,7 +21,7 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "clear-diagnostics": "rimraf diagnostics",
-        "test": "node --require ts-node/register --test src/util/Scheduler.test.ts",
+        "test": "node --require ts-node/register --test \"src/util/*.test.ts\"",
         "clear-sessions": "node ./scripts/main/clearSessions.js",
         "open-session": "node ./scripts/main/browserSession.js -email"
     },
