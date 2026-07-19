@@ -68,7 +68,7 @@ export function Ejecuciones({ state }) {
                     class=${'fchip' + (range.days === r.days ? ' on' : '')}
                     onClick=${() => setRange(r)}>${r.label}</button>`)}</div>
             </div>
-            <${AreaChart} data=${daily} ariaLabel=${`Puntos ganados por día, últimos ${range.days} días`} />
+            <${AreaChart} data=${daily} ariaLabel=${`Puntos ganados por día, últimos ${Math.min(range.days, 90)} días`} />
         </div>
         <div class="cols">
             <div class="card" style="padding:16px 6px 6px">
@@ -76,11 +76,11 @@ export function Ejecuciones({ state }) {
                 <table>
                     <thead><tr><th>Inicio</th><th>Duración</th><th class="num">Puntos</th><th>Cuentas</th><th>Resultado</th></tr></thead>
                     <tbody>
-                    ${inRange.slice(0, 50).map((r, i) => {
+                    ${inRange.slice(0, 50).map(r => {
                         const ok = (r.accounts ?? []).filter(a => a.success === true).length
                         const fail = (r.accounts ?? []).filter(a => a.success === false).length
                         return html`<tr key=${r.startedAt} style="cursor:pointer"
-                            onClick=${() => setOpen(open === i ? null : i)}>
+                            onClick=${() => setOpen(open === r.startedAt ? null : r.startedAt)}>
                             <td class="em">${fmtDate(r.startedAt)}</td>
                             <td>${fmtDuration(r)}</td>
                             <td class="num">+${(r.collected ?? 0).toLocaleString('es')}</td>
@@ -91,7 +91,7 @@ export function Ejecuciones({ state }) {
                                     ? html`<span class="badge ok">✓ completado</span>`
                                     : html`<span class="badge mut">código ${r.exit?.code ?? '?'}</span>`}</td>
                         </tr>
-                        ${open === i && html`<tr key=${r.startedAt + '-d'}><td colspan="5" style="background:var(--surface-2)">
+                        ${open === r.startedAt && html`<tr key=${r.startedAt + '-d'}><td colspan="5" style="background:var(--surface-2)">
                             ${(r.accounts ?? []).map(a => html`<div key=${a.email} class="row" style="padding:4px 8px;font-size:12.5px">
                                 <span class="em" style="flex:1">${a.email}</span>
                                 <span class="num">+${(a.collected ?? 0).toLocaleString('es')}</span>
