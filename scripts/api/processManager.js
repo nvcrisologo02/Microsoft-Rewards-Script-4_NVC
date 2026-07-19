@@ -356,13 +356,15 @@ export class ProcessManager extends EventEmitter {
                 : `code ${code ?? 'n/a'}${signal ? ` / signal ${signal}` : ''}`
         this._controllerLog(code === 0 && errorMessage == null ? 'info' : 'error', `Run finished (${label}).`)
 
-        this.history.unshift({
+        const entry = {
             startedAt: this.startedAt,
             endedAt,
             exit: this.lastExit,
             run: summarizeRunState(this.runState)
-        })
+        }
+        this.history.unshift(entry)
         if (this.history.length > this.historySize) this.history.pop()
+        this.emit('run-complete', entry)
 
         this.child = null
         this.pid = null

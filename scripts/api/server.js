@@ -8,6 +8,7 @@ import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
 import { readSchedule, writeSchedule, remapExclusionsAfterDelete } from './scheduleStore.js'
+import { appendRun, historyFilePath, readRuns } from './historyStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
 import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
@@ -82,6 +83,16 @@ pm.on('log', entry => {
     const line = (entry.raw ?? entry.message ?? '') + '\n'
     if (entry.source === 'stderr') process.stderr.write(line)
     else process.stdout.write(line)
+})
+
+// Persist each completed run to disk so history survives API restarts.
+// Best-effort: a write failure here must never crash the server or the run.
+pm.on('run-complete', entry => {
+    try {
+        appendRun(projectRoot, toHistoryRecord(entry))
+    } catch (error) {
+        log('WARN', `History append failed: ${error.message}`)
+    }
 })
 
 function toHistoryRecord(entry) {
@@ -259,6 +270,7 @@ const requestHandler = async (req, res) => {
                     'GET /logs',
                     'GET /errors',
                     'GET /history',
+                    'GET /history?persisted=1',
                     'GET /accounts',
                     'GET /accounts/:index',
                     'POST /accounts',
@@ -323,6 +335,12 @@ const requestHandler = async (req, res) => {
 
         // historyu
         if (method === 'GET' && pathname === '/history') {
+            if (url.searchParams.get('persisted') === '1') {
+                const limit = clampInt(url.searchParams.get('limit'), 1, 500, 100)
+                const offset = clampInt(url.searchParams.get('offset'), 0, 1000000, 0)
+                const { runs, total } = readRuns(projectRoot, { limit, offset })
+                return sendJson(res, 200, { runs, total, count: runs.length, inMemoryOnly: false, file: historyFilePath(projectRoot) })
+            }
             const limit = clampInt(url.searchParams.get('limit'), 1, RUN_HISTORY, RUN_HISTORY)
             const runs = pm.getHistory().slice(0, limit).map(toHistoryRecord)
             return sendJson(res, 200, { runs, count: runs.length, inMemoryOnly: true })
