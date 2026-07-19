@@ -135,10 +135,10 @@ shows a login screen and stores the token in the browser's localStorage.
 The dashboard is a no-build Preact application vendored under
 `scripts/api/ui/`. It uses the documented endpoints only: `/health` for the auth
 probe, `/events` for live logs and status snapshots, `/accounts` (including the
-account CRUD routes and `DELETE /sessions/:email`), `/schedule`, `/errors`,
-`/config`, and the `/start`, `/stop`, `/restart` controls. Editing accounts,
-config, and the schedule from the dashboard requires the matching opt-in
-variables (`API_ALLOW_ACCOUNT_WRITE`, `API_ALLOW_CONFIG_WRITE`,
+account CRUD routes), `/sessions` (including `DELETE /sessions/:email`),
+`/schedule`, `/errors`, `/config`, and the `/start`, `/stop`, `/restart`
+controls. Editing accounts, config, and the schedule from the dashboard requires
+the matching opt-in variables (`API_ALLOW_ACCOUNT_WRITE`, `API_ALLOW_CONFIG_WRITE`,
 `API_ALLOW_SCHEDULE_WRITE`).
 
 ## Recommended `.env` setup
