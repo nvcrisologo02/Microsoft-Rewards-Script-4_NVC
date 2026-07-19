@@ -117,13 +117,13 @@ export function Configuracion() {
         const objectKeys = Object.keys(draft).filter(k => draft[k] && typeof draft[k] === 'object' && !Array.isArray(draft[k]))
         return ['general', ...objectKeys]
     }, [draft])
-    const activeGroup = group ?? groups[0]
+    const activeGroup = groups.includes(group) ? group : groups[0]
 
     if (!baseline || !draft) {
         return html`<section class="view"><h1>Configuración</h1><p class="sub">Cargando…</p></section>`
     }
 
-    const diffs = diffConfig(baseline, draft)
+    const diffs = diffConfig(baseline, draft).filter(d => d.to !== undefined)
     const onChange = (path, value) => setDraft(d => {
         const next = clone(d)
         setAt(next, path, value)
@@ -133,9 +133,11 @@ export function Configuracion() {
     const applyJson = () => {
         try {
             const parsed = JSON.parse(jsonText)
+            const removed = diffConfig(baseline, parsed).filter(d => d.to === undefined)
             setDraft(parsed)
             setTab('form')
-            toast('JSON aplicado al borrador (sin guardar todavía)')
+            if (removed.length) toast(`Aviso: eliminar claves no está soportado; ${removed.length} clave(s) se conservarán`, 'err')
+            else toast('JSON aplicado al borrador (sin guardar todavía)')
         } catch (err) {
             toast(`JSON no válido: ${err.message}`, 'err')
         }
