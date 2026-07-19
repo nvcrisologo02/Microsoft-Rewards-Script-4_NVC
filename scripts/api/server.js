@@ -9,6 +9,7 @@ import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAcc
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
 import { readSchedule, writeSchedule } from './scheduleStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
+import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
 import { resolveRunCommand } from './runCommand.js'
 import {
@@ -26,7 +27,7 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const projectRoot = getProjectRoot(__dirname)
 
-loadEnvFile(projectRoot)
+const ENV_FILE = loadEnvFile(projectRoot) ?? path.join(projectRoot, '.env')
 
 const cliArgs = parseArgs()
 
@@ -51,6 +52,7 @@ const ALLOW_CONFIG_WRITE = envBool('API_ALLOW_CONFIG_WRITE', false)
 // starting/stopping a run, so it gets its own opt-in flag rather than
 // riding along with API_MODE=true for free.
 const ALLOW_SCHEDULE_WRITE = envBool('API_ALLOW_SCHEDULE_WRITE', false)
+const ALLOW_ACCOUNT_WRITE = envBool('API_ALLOW_ACCOUNT_WRITE', false)
 
 const RUN_HISTORY = envInt('API_RUN_HISTORY', 20)
 const DIAG_DIR = envStr('API_DIAGNOSTICS_DIR') ?? path.join(projectRoot, 'diagnostics')
@@ -258,6 +260,10 @@ const requestHandler = async (req, res) => {
                     'GET /errors',
                     'GET /history',
                     'GET /accounts',
+                    'GET /accounts/:index',
+                    'POST /accounts',
+                    'PUT /accounts/:index',
+                    'DELETE /accounts/:index',
                     'GET /sessions',
                     'GET /diagnostics',
                     'GET /events',
@@ -326,6 +332,46 @@ const requestHandler = async (req, res) => {
         if (method === 'GET' && pathname === '/accounts') {
             const accounts = mergeAccountStats(loadAccounts(), pm.getHistory().map(toHistoryRecord))
             return sendJson(res, 200, { accounts, count: accounts.length })
+        }
+
+        // account detail (read; non-sensitive fields + has* flags only)
+        if (method === 'GET' && /^\/accounts\/\d+$/.test(pathname)) {
+            const index = Number(pathname.split('/')[2])
+            const detail = accountDetail(ENV_FILE, index)
+            if (!detail) return sendJson(res, 404, { error: `Account ${index} not found`, code: 'ACCOUNT_NOT_FOUND' })
+            return sendJson(res, 200, detail)
+        }
+
+        // account writes (opt-in, idle-only)
+        if ((method === 'POST' && pathname === '/accounts') || ((method === 'PUT' || method === 'DELETE') && /^\/accounts\/\d+$/.test(pathname))) {
+            if (!ALLOW_ACCOUNT_WRITE) {
+                return sendJson(res, 403, {
+                    error: 'Account writes are disabled.',
+                    code: 'ACCOUNT_WRITE_DISABLED',
+                    hint: 'Set API_ALLOW_ACCOUNT_WRITE=true in the API environment.'
+                })
+            }
+            if (pm.getStatus().state !== 'idle') {
+                return sendJson(res, 409, { error: 'Cannot edit accounts while a run is active.', code: 'NOT_IDLE' })
+            }
+            try {
+                if (method === 'DELETE') {
+                    const index = Number(pathname.split('/')[2])
+                    deleteAccount(ENV_FILE, index)
+                    refreshProcessEnv(ENV_FILE)
+                    return sendJson(res, 200, { ok: true, removed: true })
+                }
+                const body = await readJsonBody(req)
+                const targetIndex = method === 'PUT' ? Number(pathname.split('/')[2]) : null
+                const { index } = upsertAccount(ENV_FILE, targetIndex, body ?? {})
+                refreshProcessEnv(ENV_FILE)
+                return sendJson(res, method === 'POST' ? 201 : 200, { ok: true, index })
+            } catch (error) {
+                if (error instanceof AccountEditorError) {
+                    return sendJson(res, error.status, { error: error.message, code: 'ACCOUNT_EDIT_FAILED' })
+                }
+                throw error
+            }
         }
 
         // session list
