@@ -2,9 +2,10 @@ import { html, render, useState, useEffect } from './vendor/htm-preact-standalon
 import { api, ApiError, setToken, clearToken } from './api.js'
 import { connect, subscribe, disconnect, getState } from './store.js'
 import { Placeholder } from './views/placeholder.js'
+import { Resumen } from './views/resumen.js'
 
 const VIEWS = [
-    { id: 'resumen', label: 'Resumen', component: props => html`<${Placeholder} title="Resumen" phase="Fase 1 (Task 5)" ...${props} />` },
+    { id: 'resumen', label: 'Resumen', component: Resumen },
     { id: 'cuentas', label: 'Cuentas', component: props => html`<${Placeholder} title="Cuentas" phase="Fase 1 (Task 7)" ...${props} />` },
     { id: 'runs', label: 'Ejecuciones', component: props => html`<${Placeholder} title="Ejecuciones" phase="Fase 3" ...${props} />` },
     { id: 'logs', label: 'Logs', component: props => html`<${Placeholder} title="Logs" phase="Fase 1 (Task 6)" ...${props} />` },
