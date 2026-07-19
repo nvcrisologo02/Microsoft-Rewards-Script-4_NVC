@@ -4,6 +4,7 @@ import { connect, subscribe, disconnect, getState } from './store.js'
 import { Placeholder } from './views/placeholder.js'
 import { Resumen } from './views/resumen.js'
 import { Cuentas } from './views/cuentas.js'
+import { Ejecuciones } from './views/ejecuciones.js'
 import { Logs } from './views/logs.js'
 import { Programacion } from './views/programacion.js'
 import { Configuracion } from './views/configuracion.js'
@@ -11,7 +12,7 @@ import { Configuracion } from './views/configuracion.js'
 const VIEWS = [
     { id: 'resumen', label: 'Resumen', component: Resumen },
     { id: 'cuentas', label: 'Cuentas', component: Cuentas },
-    { id: 'runs', label: 'Ejecuciones', component: props => html`<${Placeholder} title="Ejecuciones" phase="Fase 3" ...${props} />` },
+    { id: 'runs', label: 'Ejecuciones', component: Ejecuciones },
     { id: 'logs', label: 'Logs', component: Logs },
     { id: 'config', label: 'Configuración', component: Configuracion },
     { id: 'schedule', label: 'Programación', component: Programacion },
