@@ -304,6 +304,8 @@ server itself remains dependency-free.
 | `POST`   | `/accounts`        | Create a new account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
 | `PUT`    | `/accounts/:index` | Update an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
 | `DELETE` | `/accounts/:index` | Delete an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
+
+Account editing requires the API to run against a real `.env` file (local mode, or Docker with a `.env` file mounted); when accounts are instead injected via compose `env_file:` variables with no matching `.env` on disk, the write routes return `409 ACCOUNTS_ENV_PROVIDED`.
 | `PUT`    | `/config`          | Replace the complete config after validation.           |
 | `PATCH`  | `/config`          | Deep-merge a partial config after validation.           |
 | `PUT`    | `/schedule`        | Persist and immediately apply supplied schedule fields. |

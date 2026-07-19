@@ -9,7 +9,7 @@ import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAcc
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
 import { readSchedule, writeSchedule } from './scheduleStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
-import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv } from './accountEditor.js'
+import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
 import { resolveRunCommand } from './runCommand.js'
 import {
@@ -353,6 +353,28 @@ const requestHandler = async (req, res) => {
             }
             if (pm.getStatus().state !== 'idle') {
                 return sendJson(res, 409, { error: 'Cannot edit accounts while a run is active.', code: 'NOT_IDLE' })
+            }
+            // In Docker, accounts commonly arrive via compose `env_file:` as
+            // container environment variables with no real .env on disk.
+            // Writing through the editor there is destructive: refreshProcessEnv
+            // deletes the compose-provided ACCOUNT_* vars, and anything created
+            // only lives in this process's memory until the container restarts.
+            // Detect that mismatch by comparing which ACCOUNT_<n>_EMAIL slots
+            // exist in process.env versus what the file itself contains.
+            {
+                const fileSlots = new Set(readEnvAccounts(ENV_FILE).accounts.map(a => a.index))
+                const envOnlySlots = Object.keys(process.env)
+                    .map(key => /^ACCOUNT_(\d+)_EMAIL$/.exec(key))
+                    .filter(Boolean)
+                    .map(m => Number(m[1]))
+                    .filter(index => !fileSlots.has(index))
+                if (envOnlySlots.length > 0) {
+                    return sendJson(res, 409, {
+                        error: 'Accounts are provided by the container environment, not an editable .env file.',
+                        code: 'ACCOUNTS_ENV_PROVIDED',
+                        hint: 'Mount a real .env file to edit accounts from the dashboard.'
+                    })
+                }
             }
             try {
                 if (method === 'DELETE') {
