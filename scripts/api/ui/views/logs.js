@@ -17,6 +17,7 @@ export function Logs({ state }) {
     const boxRef = useRef(null)
 
     const source = paused ? frozen.current : (state?.logs ?? [])
+    const lastId = source.length ? source[source.length - 1].id : 0
 
     const entries = useMemo(() => {
         const min = level === 'todos' ? 0 : LEVEL_RANK[level]
@@ -27,12 +28,12 @@ export function Logs({ state }) {
             return [e.user, e.title, e.message, e.platform]
                 .some(f => typeof f === 'string' && f.toLowerCase().includes(q))
         })
-    }, [source, level, query])
+    }, [source, lastId, level, query])
 
     useEffect(() => {
         const box = boxRef.current
         if (box && !paused) box.scrollTop = box.scrollHeight
-    }, [entries.length, paused])
+    }, [entries, paused])
 
     const togglePause = () => {
         if (!paused) frozen.current = [...(state?.logs ?? [])]
