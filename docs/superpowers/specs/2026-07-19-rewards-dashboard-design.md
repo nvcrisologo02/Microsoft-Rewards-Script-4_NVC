@@ -55,8 +55,9 @@ justificación aquí).
 
 - `GET /ui/*` — estáticos de la SPA (sin token para los assets; las llamadas de
   datos siguen exigiendo token).
-- `GET /accounts/full` *(opt-in + reveal explícito no incluye nunca password/TOTP;
-  devuelve solo metadatos editables no sensibles)*.
+- `GET /accounts/:index` — detalle editable de una cuenta: todos los campos no
+  sensibles de `.env` más flags `hasPassword`/`hasTotp`. Nunca devuelve password
+  ni TOTP.
 - `POST /accounts`, `PUT /accounts/:index`, `DELETE /accounts/:index` — requieren
   `API_ALLOW_ACCOUNT_WRITE=true`. Escriben `.env` de forma atómica (tmp + rename)
   con copia previa a `.env.bak`. Password y TOTP son *write-only*: se aceptan en
