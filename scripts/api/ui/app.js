@@ -1,5 +1,6 @@
 import { html, render, useState, useEffect } from './vendor/htm-preact-standalone.module.js'
 import { api, ApiError, setToken, clearToken } from './api.js'
+import { connect, subscribe, getState } from './store.js'
 import { Placeholder } from './views/placeholder.js'
 
 const VIEWS = [
@@ -26,10 +27,26 @@ function Sidebar({ current, onNav }) {
     </aside>`
 }
 
-function Topbar() {
+const PILL = {
+    running: ['run', 'EN EJECUCIÓN'],
+    starting: ['run', 'ARRANCANDO'],
+    stopping: ['stopping', 'DETENIENDO'],
+    idle: ['', 'INACTIVO']
+}
+
+function Topbar({ state }) {
+    const st = state?.status?.state ?? 'idle'
+    const [cls, label] = state?.connected ? (PILL[st] ?? PILL.idle) : ['off', 'SIN CONEXIÓN']
+    const live = state?.status?.run?.live
+    const collected = state?.status?.run?.collected ?? 0
     return html`<header class="top">
-        <span class="pill"><span class="dot"></span>SIN CONEXIÓN</span>
-        <div class="pts"><b>— pts</b><small> </small></div>
+        <span class=${`pill ${cls}`}><span class="dot"></span>${label}</span>
+        ${live?.currentAccount && html`<span style="color:var(--ink-3);font-size:12.5px">
+            <span class="em" style="color:var(--ink-2)">${live.currentAccount}</span></span>`}
+        <div class="pts">
+            <b>${live?.currentBalance != null ? live.currentBalance.toLocaleString('es') : '—'} pts</b>
+            <small>${collected > 0 ? `+${collected.toLocaleString('es')} en esta sesión` : ' '}</small>
+        </div>
     </header>`
 }
 
@@ -63,6 +80,7 @@ function App() {
     // authed: null = probing, false = needs token, true = in
     const [authed, setAuthed] = useState(null)
     const [current, setCurrent] = useState('resumen')
+    const [, force] = useState(0)
 
     useEffect(() => {
         api('/health')
@@ -70,14 +88,21 @@ function App() {
             .catch(err => setAuthed(err instanceof ApiError && err.status === 401 ? false : true))
     }, [])
 
+    useEffect(() => {
+        if (authed !== true) return
+        connect()
+        return subscribe(() => force(n => n + 1))
+    }, [authed])
+
     if (authed === null) return html`<div class="login"><div style="color:var(--ink-3)">Conectando…</div></div>`
     if (authed === false) return html`<${Login} onOk=${() => setAuthed(true)} />`
 
     const View = VIEWS.find(v => v.id === current).component
+    const st = getState()
     return html`<div class="app">
         <${Sidebar} current=${current} onNav=${setCurrent} />
-        <${Topbar} />
-        <main class="main"><${View} state=${null} /></main>
+        <${Topbar} state=${st} />
+        <main class="main"><${View} state=${st} /></main>
     </div>`
 }
 
