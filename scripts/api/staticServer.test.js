@@ -69,8 +69,20 @@ test('GET /ui/missing.js returns 404 JSON', async () => {
 
 test('encoded path traversal is blocked', async () => {
     await withServer(async base => {
-        const res = await fetch(`${base}/ui/%2e%2e/outside.txt`)
-        assert.equal(res.status, 404)
+        const url = new URL(base)
+        // Test with encoded slash: /ui/..%2foutside.txt
+        // URL parsing won't collapse this because the slash is encoded,
+        // so the handler will see /ui/..%2foutside.txt, decode to ../outside.txt,
+        // and path.resolve will block it as traversal.
+        const status = await new Promise((resolve, reject) => {
+            const req = http.request({ host: '127.0.0.1', port: url.port, path: '/ui/..%2foutside.txt' }, res => {
+                res.resume()
+                resolve(res.statusCode)
+            })
+            req.on('error', reject)
+            req.end()
+        })
+        assert.equal(status, 404)
     })
 })
 
