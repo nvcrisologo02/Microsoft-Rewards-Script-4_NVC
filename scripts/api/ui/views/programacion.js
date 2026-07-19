@@ -37,17 +37,22 @@ export function Programacion() {
         api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => {})
     }, [])
 
+    // Hooks must run in the same order on every render, so cronValid and the
+    // upcoming-runs useMemo are computed here - above the loading-state early
+    // return below - with null-safe guards while schedule/draft haven't
+    // loaded yet.
+    const cronValid = draft ? draft.cron !== '' && parseCron(draft.cron) !== null : false
+    const upcoming = useMemo(
+        () => (draft && cronValid && draft.enabled ? nextRuns(draft.cron, new Date(), 5) : []),
+        [draft?.cron, draft?.enabled, cronValid]
+    )
+
     if (!schedule || !draft) {
         return html`<section class="view"><h1>Programación</h1>
             <p class="sub">Cargando…</p></section>`
     }
 
     const writable = Boolean(schedule.writable)
-    const cronValid = draft.cron !== '' && parseCron(draft.cron) !== null
-    const upcoming = useMemo(
-        () => (cronValid && draft.enabled ? nextRuns(draft.cron, new Date(), 5) : []),
-        [draft.cron, draft.enabled, cronValid]
-    )
     const setField = patch => setDraft(d => ({ ...d, ...patch }))
 
     const toggleExcluded = index => setDraft(d => ({
