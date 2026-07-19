@@ -10,10 +10,16 @@ export function Cuentas({ state }) {
     const [accounts, setAccounts] = useState(null)
     const [sessions, setSessions] = useState([])
     const [query, setQuery] = useState('')
+    const [loadFailed, setLoadFailed] = useState(false)
     const busy = ['starting', 'running', 'stopping'].includes(state?.status?.state)
 
     const load = () => {
-        api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => setAccounts([]))
+        setLoadFailed(false)
+        api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => {
+            setAccounts([])
+            setLoadFailed(true)
+            toast('No se pudieron cargar las cuentas', 'err')
+        })
         api('/sessions').then(d => setSessions(d.sessions ?? [])).catch(() => setSessions([]))
     }
     useEffect(load, [])
@@ -86,8 +92,10 @@ export function Cuentas({ state }) {
                 })}
                 </tbody>
             </table>
-            ${accounts && accounts.length === 0 && html`<p style="padding:0 10px;color:var(--ink-3)">
+            ${accounts && accounts.length === 0 && !loadFailed && html`<p style="padding:0 10px;color:var(--ink-3)">
                 No hay cuentas en .env. Añade bloques ACCOUNT_1_* siguiendo env.example.</p>`}
+            ${loadFailed && html`<p style="padding:0 10px;color:var(--ink-3)">
+                No se pudieron cargar las cuentas. Comprueba la conexión con la API y pulsa Recargar.</p>`}
         </div>
     </section>`
 }
