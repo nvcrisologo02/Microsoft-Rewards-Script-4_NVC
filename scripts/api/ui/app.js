@@ -1,13 +1,13 @@
 import { html, render, useState, useEffect } from './vendor/htm-preact-standalone.module.js'
 import { api, ApiError, setToken, clearToken } from './api.js'
 import { connect, subscribe, disconnect, getState } from './store.js'
-import { Placeholder } from './views/placeholder.js'
 import { Resumen } from './views/resumen.js'
 import { Cuentas } from './views/cuentas.js'
 import { Ejecuciones } from './views/ejecuciones.js'
 import { Logs } from './views/logs.js'
 import { Programacion } from './views/programacion.js'
 import { Configuracion } from './views/configuracion.js'
+import { Diagnosticos } from './views/diagnosticos.js'
 
 const VIEWS = [
     { id: 'resumen', label: 'Resumen', component: Resumen },
@@ -16,7 +16,7 @@ const VIEWS = [
     { id: 'logs', label: 'Logs', component: Logs },
     { id: 'config', label: 'Configuración', component: Configuracion },
     { id: 'schedule', label: 'Programación', component: Programacion },
-    { id: 'diag', label: 'Diagnósticos', component: props => html`<${Placeholder} title="Diagnósticos" phase="Fase 3" ...${props} />` }
+    { id: 'diag', label: 'Diagnósticos', component: Diagnosticos }
 ]
 
 function Sidebar({ current, onNav }) {

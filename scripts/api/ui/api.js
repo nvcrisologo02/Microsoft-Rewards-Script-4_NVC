@@ -35,3 +35,9 @@ export async function api(path, { method = 'GET', body } = {}) {
     if (!res.ok) throw new ApiError(res.status, data)
     return data
 }
+
+export function authedUrl(path) {
+    const token = getToken()
+    if (!token) return path
+    return path + (path.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token)
+}
