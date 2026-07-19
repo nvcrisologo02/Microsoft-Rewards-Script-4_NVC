@@ -50,6 +50,7 @@ function AccountModal({ initial, onClose, onSaved }) {
             onClose()
         } catch (err) {
             if (err instanceof ApiError && err.status === 403) toast('Escritura desactivada: pon API_ALLOW_ACCOUNT_WRITE=true en .env y reinicia la API', 'err')
+            else if (err instanceof ApiError && err.body?.code === 'ACCOUNTS_ENV_PROVIDED') toast('Las cuentas vienen del entorno del contenedor; monta un fichero .env real para editarlas', 'err')
             else if (err instanceof ApiError && err.status === 409) toast('No se puede editar con el bot en ejecución', 'err')
             else toast(err instanceof ApiError ? err.message : 'Sin conexión con la API', 'err')
         } finally {
@@ -170,6 +171,7 @@ export function Cuentas({ state }) {
             load()
         } catch (err) {
             if (err instanceof ApiError && err.status === 403) toast('Escritura desactivada: pon API_ALLOW_ACCOUNT_WRITE=true en .env y reinicia la API', 'err')
+            else if (err instanceof ApiError && err.body?.code === 'ACCOUNTS_ENV_PROVIDED') toast('Las cuentas vienen del entorno del contenedor; monta un fichero .env real para editarlas', 'err')
             else if (err instanceof ApiError && err.status === 409 && err.body?.code === 'ACCOUNT_MISMATCH') {
                 toast('La lista estaba desactualizada; recarga e inténtalo de nuevo', 'err')
                 load()
