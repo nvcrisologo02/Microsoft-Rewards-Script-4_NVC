@@ -46,12 +46,12 @@ export function Resumen({ state }) {
     const [picker, setPicker] = useState(false)
 
     useEffect(() => {
-        api('/schedule').then(setSchedule).catch(() => {})
-        api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => {})
+        api('/schedule').then(setSchedule).catch(() => toast('No se pudo cargar la programación', 'err'))
+        api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => toast('No se pudo cargar la lista de cuentas', 'err'))
     }, [])
     useEffect(() => {
         api('/errors?limit=8').then(d => setErrors(d.errors ?? [])).catch(() => {})
-    }, [status?.state])
+    }, [status?.latestLogId])
 
     const busy = ['starting', 'running', 'stopping'].includes(status?.state)
     const accs = run?.accounts ?? []
