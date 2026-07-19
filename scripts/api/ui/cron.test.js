@@ -48,3 +48,19 @@ test('dow 7 is treated as Sunday', () => {
 test('invalid expression → empty', () => {
     assert.deepEqual(nextRuns('nope', FROM, 5), [])
 })
+
+test('dom and dow both restricted → standard OR semantics', () => {
+    // FROM is Wed 2026-07-15. '0 7 20 * 1' fires on every Monday AND on the 20th.
+    // First 3 matches: Jul 20 (20th + Monday), Jul 27 (Monday), Aug 3 (Monday)
+    const runs = nextRuns('0 7 20 * 1', FROM, 3)
+    assert.deepEqual(
+        runs.map(d => [d.getDate(), d.getDay()]),
+        [[20, 1], [27, 1], [3, 1]]
+    )
+
+    // The 20th of August 2026 is a Thursday — reachable only via the dom half of OR.
+    // First 3 matches after FROM for '0 7 20 8 1': Aug 3 (Monday), Aug 10 (Monday), Aug 17 (Monday)
+    // This test would fail if AND-only semantics were used (since Aug 20 is Thursday, not Monday)
+    const orOnly = nextRuns('0 7 20 8 1', FROM, 1)
+    assert.deepEqual([orOnly[0].getDate(), orOnly[0].getMonth()], [3, 7])
+})
