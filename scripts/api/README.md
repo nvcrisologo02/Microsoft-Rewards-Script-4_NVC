@@ -120,6 +120,23 @@ account-scoped session deletion are unavailable.
 The exact package name and version are read from the repository's
 `package.json`.
 
+## Dashboard
+
+The API serves a built-in dashboard SPA at:
+
+```text
+http://127.0.0.1:3010/ui
+```
+
+Static dashboard assets under `/ui` do not require the API token; every data
+endpoint the dashboard calls still does. When `API_TOKEN` is set, the dashboard
+shows a login screen and stores the token in the browser's localStorage.
+
+The dashboard is a no-build Preact application vendored under
+`scripts/api/ui/`. It uses the documented endpoints only: `/events` for live
+logs and status, `/status`, `/points`, `/accounts`, `/sessions`, `/schedule`,
+`/errors`, and the `/start`, `/stop`, `/restart` controls.
+
 ## Recommended `.env` setup
 
 The API automatically loads the first available `.env` from the current working
