@@ -28,6 +28,8 @@ let es = null
 let retryMs = 1000
 let retryTimer = null
 let started = false
+let authLostCb = null
+let probing = false
 
 function open() {
     const token = getToken()
@@ -64,14 +66,31 @@ function open() {
         emit()
         es.close()
         es = null
-        retryTimer = setTimeout(open, retryMs)
-        retryMs = Math.min(retryMs * 2, 30000)
+        if (probing) return
+        probing = true
+        const token = getToken()
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
+        fetch('/health', { headers }).then(res => {
+            probing = false
+            if (res.status === 401) {
+                started = false
+                authLostCb?.()
+                return
+            }
+            retryTimer = setTimeout(open, retryMs)
+            retryMs = Math.min(retryMs * 2, 30000)
+        }).catch(() => {
+            probing = false
+            retryTimer = setTimeout(open, retryMs)
+            retryMs = Math.min(retryMs * 2, 30000)
+        })
     }
 }
 
-export function connect() {
+export function connect({ onAuthLost } = {}) {
     if (started) return
     started = true
+    authLostCb = onAuthLost ?? null
     open()
 }
 

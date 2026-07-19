@@ -37,7 +37,7 @@ const PILL = {
     idle: ['', 'INACTIVO']
 }
 
-function Topbar({ state }) {
+function Topbar({ state, onLogout }) {
     const st = state?.status?.state ?? 'idle'
     const [cls, label] = state?.connected ? (PILL[st] ?? PILL.idle) : ['off', 'SIN CONEXIÓN']
     const live = state?.status?.run?.live
@@ -50,6 +50,7 @@ function Topbar({ state }) {
             <b>${live?.currentBalance != null ? live.currentBalance.toLocaleString('es') : '—'} pts</b>
             <small>${collected > 0 ? `+${collected.toLocaleString('es')} en esta sesión` : ' '}</small>
         </div>
+        <button class="btn sm" onClick=${onLogout}>Salir</button>
     </header>`
 }
 
@@ -93,13 +94,19 @@ function App() {
 
     useEffect(() => {
         if (authed !== true) return
-        connect()
+        connect({ onAuthLost: () => { clearToken(); setAuthed(false) } })
         const unsub = subscribe(() => force(n => n + 1))
         return () => {
             unsub()
             disconnect()
         }
     }, [authed])
+
+    const onLogout = () => {
+        clearToken()
+        disconnect()
+        setAuthed(false)
+    }
 
     if (authed === null) return html`<div class="login"><div style="color:var(--ink-3)">Conectando…</div></div>`
     if (authed === false) return html`<${Login} onOk=${() => setAuthed(true)} />`
@@ -108,7 +115,7 @@ function App() {
     const st = getState()
     return html`<div class="app">
         <${Sidebar} current=${current} onNav=${setCurrent} />
-        <${Topbar} state=${st} />
+        <${Topbar} state=${st} onLogout=${onLogout} />
         <main class="main"><${View} state=${st} /></main>
     </div>`
 }
