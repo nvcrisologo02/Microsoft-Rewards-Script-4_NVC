@@ -45,7 +45,7 @@ restarts:
 - parsed errors;
 - account statistics calculated from run history.
 
-Completed runs are appended to a persistent NDJSON file (when requested via query parameter) but are also retained in memory for the current session.
+Completed runs are automatically appended to a persistent NDJSON file as they finish. The `GET /history` query parameter `persisted=1` only selects whether the API reads from this durable file or from the in-memory cache; the append itself is unconditional and happens regardless of the read mode.
 
 The API does not create its own database. Config and schedule writes are both
 disabled by default and require separate opt-in environment variables:
@@ -667,8 +667,8 @@ Query parameters:
 | Parameter |           Default | Behavior                                                            |
 | --------- | ----------------: | ------------------------------------------------------------------- |
 | `persisted` |       `0` | When set to `1`, read from the persistent NDJSON file instead of in-memory history. |
-| `limit`   | `API_RUN_HISTORY` | Number of records to return, capped at the configured history size. |
-| `offset`  |       `0` | Number of records to skip (for pagination). Used with `persisted=1`. |
+| `limit`   | `API_RUN_HISTORY` (in-memory), `100` (persisted) | In-memory mode: capped at `API_RUN_HISTORY`. Persisted mode: capped at `500`. |
+| `offset`  |       `0` | Number of records to skip (pagination). Only applies when `persisted=1`. Capped at 1,000,000. |
 
 **cURL - in-memory history (default)**
 
@@ -734,11 +734,13 @@ console.log(data.runs)
         }
     ],
     "count": 1,
-    "inMemoryOnly": false
+    "total": 42,
+    "inMemoryOnly": false,
+    "file": "/app/data/history.ndjson"
 }
 ```
 
-In-memory history is reset when the API process restarts. For durable run history, request `persisted=1` to read from the NDJSON file. The file path can be overridden with the `HISTORY_FILE` environment variable.
+In-memory history is reset when the API process restarts. For durable run history, request `persisted=1` to read from the NDJSON file. The file path can be overridden with the `HISTORY_FILE` environment variable. The `total` field indicates total records in the file (useful for pagination with `offset`), and `file` shows the resolved file path.
 
 ### `GET /accounts`
 
