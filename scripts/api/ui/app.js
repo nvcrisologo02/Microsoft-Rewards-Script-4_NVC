@@ -6,13 +6,14 @@ import { Resumen } from './views/resumen.js'
 import { Cuentas } from './views/cuentas.js'
 import { Logs } from './views/logs.js'
 import { Programacion } from './views/programacion.js'
+import { Configuracion } from './views/configuracion.js'
 
 const VIEWS = [
     { id: 'resumen', label: 'Resumen', component: Resumen },
     { id: 'cuentas', label: 'Cuentas', component: Cuentas },
     { id: 'runs', label: 'Ejecuciones', component: props => html`<${Placeholder} title="Ejecuciones" phase="Fase 3" ...${props} />` },
     { id: 'logs', label: 'Logs', component: Logs },
-    { id: 'config', label: 'Configuración', component: props => html`<${Placeholder} title="Configuración" phase="Fase 2" ...${props} />` },
+    { id: 'config', label: 'Configuración', component: Configuracion },
     { id: 'schedule', label: 'Programación', component: Programacion },
     { id: 'diag', label: 'Diagnósticos', component: props => html`<${Placeholder} title="Diagnósticos" phase="Fase 3" ...${props} />` }
 ]
