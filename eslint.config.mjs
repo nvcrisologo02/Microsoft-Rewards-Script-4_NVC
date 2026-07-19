@@ -5,7 +5,10 @@ import globals from 'globals'
 
 export default tseslint.config(
     {
-        ignores: ['dist/**', 'node_modules/**', 'diagnostics/**', 'sessions/**', 'scripts/**']
+        ignores: [
+            'dist/**', 'node_modules/**', 'diagnostics/**', 'sessions/**', 'scripts/**',
+            '!scripts', '!scripts/api', '!scripts/api/ui', '!scripts/api/ui/**'
+        ]
     },
     js.configs.recommended,
     ...tseslint.configs.recommended,
@@ -24,6 +27,14 @@ export default tseslint.config(
             'no-empty': 'off',
             'preserve-caught-error': 'off'
         }
+    },
+    {
+        files: ['scripts/api/ui/**/*.js'],
+        languageOptions: { globals: { ...globals.browser } }
+    },
+    // Vendored third-party file: never lint/reformat it.
+    {
+        ignores: ['scripts/api/ui/vendor/**']
     },
     // Must come last: disables ESLint rules that conflict with Prettier formatting
     prettier
