@@ -134,9 +134,12 @@ shows a login screen and stores the token in the browser's localStorage.
 
 The dashboard is a no-build Preact application vendored under
 `scripts/api/ui/`. It uses the documented endpoints only: `/health` for the auth
-probe, `/events` for live logs and status snapshots, `/accounts`, `/sessions`
-(including `DELETE /sessions/:email`), `/schedule`, `/errors`, and the `/start`,
-`/stop`, `/restart` controls.
+probe, `/events` for live logs and status snapshots, `/accounts` (including the
+account CRUD routes and `DELETE /sessions/:email`), `/schedule`, `/errors`,
+`/config`, and the `/start`, `/stop`, `/restart` controls. Editing accounts,
+config, and the schedule from the dashboard requires the matching opt-in
+variables (`API_ALLOW_ACCOUNT_WRITE`, `API_ALLOW_CONFIG_WRITE`,
+`API_ALLOW_SCHEDULE_WRITE`).
 
 ## Recommended `.env` setup
 
@@ -281,6 +284,7 @@ server itself remains dependency-free.
 | `GET`  | `/errors`                       | Recent warning/error logs and per-account failures.               |
 | `GET`  | `/history`                      | Completed runs retained by this API process.                      |
 | `GET`  | `/accounts`                     | Safe summaries of configured accounts and recent run statistics.  |
+| `GET`  | `/accounts/:index`              | Editable non-sensitive fields of one account plus hasPassword/hasTotp flags. |
 | `GET`  | `/sessions`                     | Stored account/platform session metadata without secret contents. |
 | `GET`  | `/diagnostics`                  | List available error-capture directories.                         |
 | `GET`  | `/diagnostics/<capture>/<file>` | Download or view one diagnostic artifact.                         |
@@ -297,6 +301,9 @@ server itself remains dependency-free.
 | `POST`   | `/restart`         | Stop an active run, then start a new one.               |
 | `POST`   | `/shutdown`        | Stop the bot if needed and terminate the API process.   |
 | `DELETE` | `/sessions/:email` | Delete only one account's mobile and desktop sessions.  |
+| `POST`   | `/accounts`        | Create a new account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
+| `PUT`    | `/accounts/:index` | Update an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
+| `DELETE` | `/accounts/:index` | Delete an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
 | `PUT`    | `/config`          | Replace the complete config after validation.           |
 | `PATCH`  | `/config`          | Deep-merge a partial config after validation.           |
 | `PUT`    | `/schedule`        | Persist and immediately apply supplied schedule fields. |
@@ -1810,6 +1817,7 @@ All variables are optional.
 | `API_RUN_COMMAND`          | auto                          | Override the executable used to launch the bot.                                             |
 | `API_RUN_ARGS`             | none                          | Default arguments for `API_RUN_COMMAND`; accepts whitespace-separated text or a JSON array. |
 | `API_DIAGNOSTICS_DIR`      | `<repo>/diagnostics`          | Read-only diagnostics directory.                                                            |
+| `API_ALLOW_ACCOUNT_WRITE`  | `false`                       | Permit `POST` / `PUT` / `DELETE /accounts` (.env rewrites).                                 |
 | `API_ALLOW_CONFIG_WRITE`   | `false`                       | Permit `PUT` and `PATCH /config`.                                                           |
 | `API_ALLOW_SCHEDULE_WRITE` | `false`                       | Permit `PUT` and `PATCH /schedule`.                                                         |
 | `API_ALLOW_ENV_OVERRIDES`  | `false`                       | Permit arbitrary `env` fields in `/start` and `/restart`.                                   |
