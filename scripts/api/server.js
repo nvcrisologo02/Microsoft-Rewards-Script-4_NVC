@@ -261,7 +261,7 @@ const requestHandler = async (req, res) => {
                 version: pkgVersion,
                 message: 'Control API',
                 authRequired: Boolean(TOKEN),
-                stateless: true,
+                persistence: { history: true },
                 endpoints: [
                     'GET /ui (dashboard)',
                     'GET /health',

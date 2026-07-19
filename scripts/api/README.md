@@ -114,9 +114,12 @@ A successful response looks like:
 }
 ```
 
-`stateless: true` means live controller data is kept in memory rather than an
-API database. It does not mean the explicitly enabled config/schedule writes or
-account-scoped session deletion are unavailable.
+`persistence: { history: true }` (returned by `GET /`) means completed run
+history is durably appended to an NDJSON file on disk and survives API
+restarts. Live logs, the in-progress run state, and errors still live only in
+memory for the current process. This is unrelated to whether config/schedule
+writes or account-scoped session deletion are enabled - those are controlled
+by their own opt-in flags.
 
 The exact package name and version are read from the repository's
 `package.json`.
@@ -339,7 +342,7 @@ console.log(data)
     "version": "4.0.3",
     "message": "Control API",
     "authRequired": true,
-    "stateless": true,
+    "persistence": { "history": true },
     "endpoints": [
         "GET /health",
         "GET /status",
