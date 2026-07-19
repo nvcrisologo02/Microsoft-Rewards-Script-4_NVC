@@ -11,12 +11,13 @@ function makeRoot() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-ui-'))
     fs.writeFileSync(path.join(root, 'index.html'), '<title>Rewards Control</title>')
     fs.writeFileSync(path.join(root, 'styles.css'), 'body{color:red}')
-    fs.writeFileSync(path.join(path.dirname(root), 'outside.txt'), 'secret')
-    return root
+    const outsidePath = path.join(path.dirname(root), 'outside.txt')
+    fs.writeFileSync(outsidePath, 'secret')
+    return { root, outsidePath }
 }
 
 async function withServer(fn) {
-    const root = makeRoot()
+    const { root, outsidePath } = makeRoot()
     const serveUi = createUiHandler({ root })
     const server = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://localhost')
@@ -32,6 +33,7 @@ async function withServer(fn) {
     } finally {
         server.close()
         fs.rmSync(root, { recursive: true, force: true })
+        fs.rmSync(outsidePath, { force: true })
     }
 }
 
