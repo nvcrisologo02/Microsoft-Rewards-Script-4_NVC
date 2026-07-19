@@ -165,11 +165,15 @@ export function Cuentas({ state }) {
     const removeAccount = async a => {
         if (!confirm(`¿Eliminar la cuenta ${a.email} de .env? Esta acción reescribe el fichero (copia previa en .env.bak).`)) return
         try {
-            await api(`/accounts/${a.index}`, { method: 'DELETE' })
+            await api(`/accounts/${a.index}?email=${encodeURIComponent(a.email)}`, { method: 'DELETE' })
             toast('Cuenta eliminada')
             load()
         } catch (err) {
             if (err instanceof ApiError && err.status === 403) toast('Escritura desactivada: pon API_ALLOW_ACCOUNT_WRITE=true en .env y reinicia la API', 'err')
+            else if (err instanceof ApiError && err.status === 409 && err.body?.code === 'ACCOUNT_MISMATCH') {
+                toast('La lista estaba desactualizada; recarga e inténtalo de nuevo', 'err')
+                load()
+            }
             else if (err instanceof ApiError && err.status === 409) toast('No se puede eliminar con el bot en ejecución', 'err')
             else toast('Error al eliminar la cuenta', 'err')
         }

@@ -379,6 +379,21 @@ const requestHandler = async (req, res) => {
             try {
                 if (method === 'DELETE') {
                     const index = Number(pathname.split('/')[2])
+                    // Optional confirmation guard: the dashboard's account list
+                    // can go stale after any renumbering delete, so a client
+                    // may pass the email it displayed for this index. If it no
+                    // longer matches, the index almost certainly points at a
+                    // different account now - refuse rather than delete blind.
+                    const emailParam = url.searchParams.get('email')
+                    if (emailParam) {
+                        const detail = accountDetail(ENV_FILE, index)
+                        if (!detail || detail.email.toLowerCase() !== emailParam.toLowerCase()) {
+                            return sendJson(res, 409, {
+                                error: 'Account index/email mismatch — the account list may be stale. Reload and retry.',
+                                code: 'ACCOUNT_MISMATCH'
+                            })
+                        }
+                    }
                     deleteAccount(ENV_FILE, index)
                     refreshProcessEnv(ENV_FILE)
                     // Best-effort: a persisted schedule.json can still exclude
