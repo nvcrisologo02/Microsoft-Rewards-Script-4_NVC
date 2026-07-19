@@ -1,3 +1,6 @@
+// Pin a non-UTC zone so local-day bucketing regressions fail everywhere.
+process.env.TZ = 'Europe/Madrid'
+
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -45,4 +48,13 @@ test('totalsByAccount sums, counts runs and failures, sorts desc', () => {
 test('empty input → empty outputs', () => {
     assert.deepEqual(totalsByAccount([]), [])
     assert.equal(aggregateDaily([], 5, NOW).length, 5)
+})
+
+test('runs near UTC midnight bucket into the LOCAL day', () => {
+    // 22:30 UTC on Jul 17 is 00:30 LOCAL Jul 18 in Europe/Madrid (UTC+2 in summer).
+    const runs = [{ startedAt: '2026-07-17T22:30:00.000Z', collected: 42, accounts: [] }]
+    const days = aggregateDaily(runs, 3, NOW)
+    const jul18 = days.find(d => d.key === '2026-07-18')
+    assert.equal(jul18.points, 42)
+    assert.equal(days.find(d => d.key === '2026-07-17')?.points ?? 0, 0)
 })
