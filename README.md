@@ -156,6 +156,10 @@ curl --request POST \
   --data '{"accountIndex":2}'
 ```
 
+The API also ships a built-in dashboard: with the API running, open
+`http://127.0.0.1:3010/ui` in a browser to start/stop runs, watch live logs and
+points, and manage stored sessions. See `scripts/api/README.md` for details.
+
 For a ready-made web interface, use the supported and endorsed
 [Rewards Dashboard](https://github.com/mgrimace/rewards-dashboard). It connects
 to this Control API to manage runs, accounts, schedules, logs, points, and

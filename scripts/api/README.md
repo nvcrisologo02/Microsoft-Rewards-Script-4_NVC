@@ -133,9 +133,10 @@ endpoint the dashboard calls still does. When `API_TOKEN` is set, the dashboard
 shows a login screen and stores the token in the browser's localStorage.
 
 The dashboard is a no-build Preact application vendored under
-`scripts/api/ui/`. It uses the documented endpoints only: `/events` for live
-logs and status, `/status`, `/points`, `/accounts`, `/sessions`, `/schedule`,
-`/errors`, and the `/start`, `/stop`, `/restart` controls.
+`scripts/api/ui/`. It uses the documented endpoints only: `/health` for the auth
+probe, `/events` for live logs and status snapshots, `/accounts`, `/sessions`
+(including `DELETE /sessions/:email`), `/schedule`, `/errors`, and the `/start`,
+`/stop`, `/restart` controls.
 
 ## Recommended `.env` setup
 
