@@ -676,7 +676,7 @@ server.on('error', err => {
 })
 
 server.listen(PORT, HOST, () => {
-    log('INFO', `${pkgName} control API listening on http://${HOST}:${PORT} (headless - no UI)`)
+    log('INFO', `${pkgName} control API listening on http://${HOST}:${PORT} | dashboard at http://${HOST}:${PORT}/ui`)
     log('INFO', `Launch command: ${command} ${args.join(' ')}`.trim())
     log(
         'INFO',
