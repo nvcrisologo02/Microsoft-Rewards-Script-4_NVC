@@ -95,6 +95,47 @@ export function readSchedule(projectRoot) {
     }
 }
 
+/**
+ * Pure index transform shared by the delete-remap logic below: an account
+ * delete densely renumbers every slot after the deleted one, so a persisted
+ * excludedAccountIndexes list needs the same treatment or it silently starts
+ * pointing at the wrong (or a nonexistent) account. `deletedIndex` is removed
+ * outright, and every remaining index greater than it shifts down by one.
+ */
+export function remapIndexes(list, deletedIndex) {
+    return list.filter(i => i !== deletedIndex).map(i => (i > deletedIndex ? i - 1 : i))
+}
+
+/**
+ * Remaps excludedAccountIndexes in the persisted schedule.json after an
+ * account has been deleted (and its remaining slots renumbered), so a
+ * scheduled run doesn't exclude the wrong account or point at a slot that no
+ * longer exists. File-only: the trigger reads this file fresh on every run,
+ * so there is no crontab to update. Returns the new array, or null when no
+ * override file has been written yet (nothing to remap).
+ */
+export function remapExclusionsAfterDelete(projectRoot, deletedIndex) {
+    const file = scheduleFilePath(projectRoot)
+    if (!fs.existsSync(file)) return null
+
+    let saved
+    try {
+        saved = JSON.parse(fs.readFileSync(file, 'utf8'))
+    } catch (err) {
+        throw Object.assign(new Error(`schedule.json is corrupt: ${err.message}`), { code: 'CORRUPT_SCHEDULE' })
+    }
+
+    const current = Array.isArray(saved.excludedAccountIndexes) ? saved.excludedAccountIndexes : []
+    const next = remapIndexes(current, deletedIndex)
+
+    const updated = { ...saved, excludedAccountIndexes: next }
+    const tmp = `${file}.${process.pid}.tmp`
+    fs.writeFileSync(tmp, JSON.stringify(updated, null, 2))
+    fs.renameSync(tmp, file)
+
+    return next
+}
+
 export function writeSchedule(projectRoot, patch) {
     const current = readSchedule(projectRoot)
     const next = { ...current }

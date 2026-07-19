@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
-import { readSchedule, writeSchedule } from './scheduleStore.js'
+import { readSchedule, writeSchedule, remapExclusionsAfterDelete } from './scheduleStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
 import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
@@ -381,6 +381,14 @@ const requestHandler = async (req, res) => {
                     const index = Number(pathname.split('/')[2])
                     deleteAccount(ENV_FILE, index)
                     refreshProcessEnv(ENV_FILE)
+                    // Best-effort: a persisted schedule.json can still exclude
+                    // stale account indexes after the delete renumbers slots.
+                    // Never fail the delete itself over this.
+                    try {
+                        remapExclusionsAfterDelete(projectRoot, index)
+                    } catch (remapErr) {
+                        log('WARN', `Could not remap schedule exclusions after deleting account ${index}:`, remapErr instanceof Error ? remapErr.message : remapErr)
+                    }
                     return sendJson(res, 200, { ok: true, removed: true })
                 }
                 const body = await readJsonBody(req)
