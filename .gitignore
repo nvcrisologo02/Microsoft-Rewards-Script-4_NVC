@@ -5,6 +5,7 @@ node_modules/
 /config.json
 /.vscode
 /diagnostics
+data/
 note
 .DS_Store
 .playwright-chromium-installed

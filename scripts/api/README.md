@@ -43,8 +43,9 @@ restarts:
 - buffered logs;
 - live run state;
 - parsed errors;
-- completed run history;
-- account statistics calculated from that history.
+- account statistics calculated from run history.
+
+Completed runs are appended to a persistent NDJSON file (when requested via query parameter) but are also retained in memory for the current session.
 
 The API does not create its own database. Config and schedule writes are both
 disabled by default and require separate opt-in environment variables:
@@ -136,7 +137,7 @@ The dashboard is a no-build Preact application vendored under
 `scripts/api/ui/`. It uses the documented endpoints only: `/health` for the auth
 probe, `/events` for live logs and status snapshots, `/accounts` (including the
 account CRUD routes), `/sessions` (including `DELETE /sessions/:email`),
-`/schedule`, `/errors`, `/config`, and the `/start`, `/stop`, `/restart`
+`/schedule`, `/errors`, `/config`, `/history`, `/diagnostics`, and the `/start`, `/stop`, `/restart`
 controls. Editing accounts, config, and the schedule from the dashboard requires
 the matching opt-in variables (`API_ALLOW_ACCOUNT_WRITE`, `API_ALLOW_CONFIG_WRITE`,
 `API_ALLOW_SCHEDULE_WRITE`).
@@ -657,15 +658,19 @@ console.log(data)
 
 ### `GET /history`
 
-Returns completed runs launched by the current API process, newest first.
+Returns completed runs, newest first.
 
-Query parameter:
+By default, returns completed runs launched by the current API process from in-memory history. When `persisted=1` is supplied, reads from the durable NDJSON file instead (default path: `data/history.ndjson`, overridable with `HISTORY_FILE` environment variable).
+
+Query parameters:
 
 | Parameter |           Default | Behavior                                                            |
 | --------- | ----------------: | ------------------------------------------------------------------- |
+| `persisted` |       `0` | When set to `1`, read from the persistent NDJSON file instead of in-memory history. |
 | `limit`   | `API_RUN_HISTORY` | Number of records to return, capped at the configured history size. |
+| `offset`  |       `0` | Number of records to skip (for pagination). Used with `persisted=1`. |
 
-**cURL**
+**cURL - in-memory history (default)**
 
 ```bash
 curl --request GET \
@@ -673,11 +678,28 @@ curl --request GET \
   --header 'Authorization: Bearer YOUR_API_TOKEN'
 ```
 
-**Axios**
+**cURL - persistent file history**
+
+```bash
+curl --request GET \
+  --url 'http://127.0.0.1:3010/history?persisted=1&limit=10' \
+  --header 'Authorization: Bearer YOUR_API_TOKEN'
+```
+
+**Axios - in-memory history**
 
 ```js
 const { data } = await api.get('/history', {
     params: { limit: 10 }
+})
+console.log(data.runs)
+```
+
+**Axios - persistent file history**
+
+```js
+const { data } = await api.get('/history', {
+    params: { persisted: 1, limit: 10, offset: 0 }
 })
 console.log(data.runs)
 ```
@@ -712,12 +734,11 @@ console.log(data.runs)
         }
     ],
     "count": 1,
-    "inMemoryOnly": true
+    "inMemoryOnly": false
 }
 ```
 
-This history is not durable. A dashboard that needs charts or long-term history
-should store the returned completion data in its own database.
+In-memory history is reset when the API process restarts. For durable run history, request `persisted=1` to read from the NDJSON file. The file path can be overridden with the `HISTORY_FILE` environment variable.
 
 ### `GET /accounts`
 
@@ -1825,6 +1846,7 @@ All variables are optional.
 | `API_ALLOW_ENV_OVERRIDES`  | `false`                       | Permit arbitrary `env` fields in `/start` and `/restart`.                                   |
 | `API_ALLOW_CONFIG_REVEAL`  | `false`                       | Permit authenticated `GET /config?reveal=1`.                                                |
 | `API_VALIDATOR_MODULE`     | auto                          | Path to a compiled module exporting `validateConfig` or `ConfigSchema`.                     |
+| `HISTORY_FILE`             | `<repo>/data/history.ndjson` | Override the persisted run-history file path.                                               |
 | `SCHEDULE_FILE`            | `<repo>/config/schedule.json` | Override the persisted schedule file path.                                                  |
 | `CRON_SCHEDULE`            | unset                         | Base schedule reported and used when no persisted schedule override exists.                 |
 | `TZ`                       | `UTC`                         | Timezone used by cron and returned by `/schedule`.                                          |
