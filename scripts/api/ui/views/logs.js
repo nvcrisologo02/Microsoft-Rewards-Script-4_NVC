@@ -41,7 +41,7 @@ export function Logs({ state }) {
     }
 
     const download = () => {
-        const text = (state?.logs ?? []).map(e => e.raw ?? e.message).join('\n')
+        const text = source.map(e => e.raw ?? e.message).join('\n')
         const a = document.createElement('a')
         a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
         a.download = `rewards-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`
