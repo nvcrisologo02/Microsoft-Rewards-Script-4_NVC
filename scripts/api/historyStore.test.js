@@ -81,3 +81,19 @@ test('missing file reads empty', () => {
         fs.rmSync(root, { recursive: true, force: true })
     }
 })
+
+test('HISTORY_FILE env override redirects all operations', () => {
+    const root = makeRoot()
+    const override = path.join(root, 'elsewhere', 'runs.ndjson')
+    process.env.HISTORY_FILE = override
+    try {
+        assert.equal(historyFilePath(root), path.resolve(override))
+        appendRun(root, record('2026-07-01T07:00:00.000Z', 100))
+        assert.equal(fs.existsSync(override), true)
+        assert.equal(fs.existsSync(path.join(root, 'data', 'history.ndjson')), false)
+        assert.equal(readRuns(root).total, 1)
+    } finally {
+        delete process.env.HISTORY_FILE
+        fs.rmSync(root, { recursive: true, force: true })
+    }
+})
