@@ -9,6 +9,7 @@ const state = {
 }
 
 const subs = new Set()
+let lastLogId = 0
 
 export function getState() {
     return state
@@ -38,6 +39,10 @@ function open() {
         state.connected = true
         retryMs = 1000
         state.status = JSON.parse(e.data)
+        if ((state.status.latestLogId ?? 0) < lastLogId) {
+            lastLogId = 0
+            state.logs = []
+        }
         emit()
     })
     es.addEventListener('status', e => {
@@ -45,7 +50,12 @@ function open() {
         emit()
     })
     es.addEventListener('log', e => {
-        state.logs.push(JSON.parse(e.data))
+        const entry = JSON.parse(e.data)
+        if (typeof entry.id === 'number') {
+            if (entry.id <= lastLogId) return
+            lastLogId = entry.id
+        }
+        state.logs.push(entry)
         if (state.logs.length > MAX_LOGS) state.logs.splice(0, state.logs.length - MAX_LOGS)
         emit()
     })

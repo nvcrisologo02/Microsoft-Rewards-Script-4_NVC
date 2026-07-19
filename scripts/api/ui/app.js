@@ -1,6 +1,6 @@
 import { html, render, useState, useEffect } from './vendor/htm-preact-standalone.module.js'
 import { api, ApiError, setToken, clearToken } from './api.js'
-import { connect, subscribe, getState } from './store.js'
+import { connect, subscribe, disconnect, getState } from './store.js'
 import { Placeholder } from './views/placeholder.js'
 
 const VIEWS = [
@@ -91,7 +91,11 @@ function App() {
     useEffect(() => {
         if (authed !== true) return
         connect()
-        return subscribe(() => force(n => n + 1))
+        const unsub = subscribe(() => force(n => n + 1))
+        return () => {
+            unsub()
+            disconnect()
+        }
     }, [authed])
 
     if (authed === null) return html`<div class="login"><div style="color:var(--ink-3)">Conectando…</div></div>`
