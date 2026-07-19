@@ -153,3 +153,93 @@ test('missing file: read returns empty, create makes slot 1', () => {
         fs.rmSync(dir, { recursive: true, force: true })
     }
 })
+
+test('editing account 1 in [1,3] file leaves ACCOUNT_3_* intact', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=first@example.com',
+        'ACCOUNT_1_PASSWORD=pass-1',
+        '',
+        'ACCOUNT_3_EMAIL=third@example.com',
+        'ACCOUNT_3_PASSWORD=pass-3'
+    ].join('\n'))
+    try {
+        upsertAccount(envPath, 1, { email: 'first-new@example.com' })
+        const d3 = accountDetail(envPath, 3)
+        assert.equal(d3.email, 'third@example.com')
+        const text = fs.readFileSync(envPath, 'utf8')
+        assert.match(text, /ACCOUNT_3_EMAIL=third@example\.com/)
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('upsertAccount edit preserves the target index', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=first@example.com',
+        'ACCOUNT_1_PASSWORD=pass-1',
+        '',
+        'ACCOUNT_3_EMAIL=third@example.com',
+        'ACCOUNT_3_PASSWORD=pass-3'
+    ].join('\n'))
+    try {
+        const { index } = upsertAccount(envPath, 3, { email: 'third-new@example.com' })
+        assert.equal(index, 3)
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('creating in [1,3] file returns next available index', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=first@example.com',
+        'ACCOUNT_1_PASSWORD=pass-1',
+        '',
+        'ACCOUNT_3_EMAIL=third@example.com',
+        'ACCOUNT_3_PASSWORD=pass-3'
+    ].join('\n'))
+    try {
+        const { index } = upsertAccount(envPath, null, { email: 'fourth@example.com', password: 'pass-4' })
+        assert.equal(index, 4)
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('deleting account 1 in [1,3] file densely renumbers to [1]', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=first@example.com',
+        'ACCOUNT_1_PASSWORD=pass-1',
+        '',
+        'ACCOUNT_3_EMAIL=third@example.com',
+        'ACCOUNT_3_PASSWORD=pass-3'
+    ].join('\n'))
+    try {
+        deleteAccount(envPath, 1)
+        const { accounts } = readEnvAccounts(envPath)
+        assert.equal(accounts.length, 1)
+        assert.equal(accounts[0].index, 1)
+        assert.equal(accounts[0].fields.EMAIL, 'third@example.com')
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('refreshProcessEnv on [1,3] file sets ACCOUNT_3 but not ACCOUNT_2', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=first@example.com',
+        'ACCOUNT_1_PASSWORD=pass-1',
+        '',
+        'ACCOUNT_3_EMAIL=third@example.com',
+        'ACCOUNT_3_PASSWORD=pass-3'
+    ].join('\n'))
+    try {
+        const env = { OTHER: 'keep' }
+        refreshProcessEnv(envPath, env)
+        assert.equal(env.ACCOUNT_1_EMAIL, 'first@example.com')
+        assert.equal(env.ACCOUNT_3_EMAIL, 'third@example.com')
+        assert.equal(env.ACCOUNT_2_EMAIL, undefined)
+        assert.equal(env.OTHER, 'keep')
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})

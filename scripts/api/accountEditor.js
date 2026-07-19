@@ -108,8 +108,8 @@ function fieldsFromBody(body, existing = {}) {
 
 function serializeAccounts(accounts) {
     const out = []
-    accounts.forEach((account, i) => {
-        const slot = i + 1
+    accounts.forEach((account) => {
+        const slot = account.index
         out.push(`# Account ${slot}`)
         const known = FIELD_ORDER.filter(f => account.fields[f] !== undefined && account.fields[f] !== '')
         const unknown = Object.keys(account.fields)
@@ -158,13 +158,13 @@ export function upsertAccount(envPath, targetIndex, body = {}) {
 
     let index
     if (isCreate) {
-        accounts.push({ index: accounts.length + 1, fields: fieldsFromBody(body) })
-        index = accounts.length
+        index = accounts.length ? Math.max(...accounts.map(a => a.index)) + 1 : 1
+        accounts.push({ index, fields: fieldsFromBody(body) })
     } else {
         const account = accounts.find(a => a.index === targetIndex)
         if (!account) throw new AccountEditorError(404, `account ${targetIndex} not found`)
         account.fields = fieldsFromBody(body, account.fields)
-        index = accounts.findIndex(a => a === account) + 1
+        index = targetIndex
     }
     writeEnvAccounts(envPath, lines, accounts)
     return { index }
@@ -174,6 +174,9 @@ export function deleteAccount(envPath, index) {
     const { lines, accounts } = readEnvAccounts(envPath)
     const remaining = accounts.filter(a => a.index !== index)
     if (remaining.length === accounts.length) throw new AccountEditorError(404, `account ${index} not found`)
+    remaining.forEach((a, i) => {
+        a.index = i + 1
+    })
     writeEnvAccounts(envPath, lines, remaining)
     return { removed: true }
 }
@@ -183,8 +186,8 @@ export function refreshProcessEnv(envPath, env = process.env) {
         if (/^ACCOUNT_\d+_/.test(key)) delete env[key]
     }
     const { accounts } = readEnvAccounts(envPath)
-    accounts.forEach((account, i) => {
-        const slot = i + 1
+    accounts.forEach((account) => {
+        const slot = account.index
         for (const [suffix, value] of Object.entries(account.fields)) {
             env[`ACCOUNT_${slot}_${suffix}`] = value
         }
