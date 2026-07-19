@@ -1,4 +1,5 @@
-import { html, render, useState } from './vendor/htm-preact-standalone.module.js'
+import { html, render, useState, useEffect } from './vendor/htm-preact-standalone.module.js'
+import { api, ApiError, setToken, clearToken } from './api.js'
 import { Placeholder } from './views/placeholder.js'
 
 const VIEWS = [
@@ -32,8 +33,46 @@ function Topbar() {
     </header>`
 }
 
+function Login({ onOk }) {
+    const [value, setValue] = useState('')
+    const [error, setError] = useState('')
+    const submit = async e => {
+        e.preventDefault()
+        setToken(value.trim())
+        try {
+            await api('/health')
+            onOk()
+        } catch (err) {
+            clearToken()
+            setError(err instanceof ApiError && err.status === 401
+                ? 'Token incorrecto.'
+                : 'No se puede conectar con la API.')
+        }
+    }
+    return html`<div class="login"><form class="modal" onSubmit=${submit}>
+        <h2>Rewards Control</h2>
+        <label for="tok">Token de la API</label>
+        <input id="tok" type="password" autofocus value=${value}
+            onInput=${e => setValue(e.target.value)} placeholder="API_TOKEN" />
+        ${error && html`<div class="err">${error}</div>`}
+        <div class="savebar"><button class="btn primary" type="submit">Entrar</button></div>
+    </form></div>`
+}
+
 function App() {
+    // authed: null = probing, false = needs token, true = in
+    const [authed, setAuthed] = useState(null)
     const [current, setCurrent] = useState('resumen')
+
+    useEffect(() => {
+        api('/health')
+            .then(() => setAuthed(true))
+            .catch(err => setAuthed(err instanceof ApiError && err.status === 401 ? false : true))
+    }, [])
+
+    if (authed === null) return html`<div class="login"><div style="color:var(--ink-3)">Conectando…</div></div>`
+    if (authed === false) return html`<${Login} onOk=${() => setAuthed(true)} />`
+
     const View = VIEWS.find(v => v.id === current).component
     return html`<div class="app">
         <${Sidebar} current=${current} onNav=${setCurrent} />
