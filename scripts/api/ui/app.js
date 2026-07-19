@@ -3,11 +3,12 @@ import { api, ApiError, setToken, clearToken } from './api.js'
 import { connect, subscribe, disconnect, getState } from './store.js'
 import { Placeholder } from './views/placeholder.js'
 import { Resumen } from './views/resumen.js'
+import { Cuentas } from './views/cuentas.js'
 import { Logs } from './views/logs.js'
 
 const VIEWS = [
     { id: 'resumen', label: 'Resumen', component: Resumen },
-    { id: 'cuentas', label: 'Cuentas', component: props => html`<${Placeholder} title="Cuentas" phase="Fase 1 (Task 7)" ...${props} />` },
+    { id: 'cuentas', label: 'Cuentas', component: Cuentas },
     { id: 'runs', label: 'Ejecuciones', component: props => html`<${Placeholder} title="Ejecuciones" phase="Fase 3" ...${props} />` },
     { id: 'logs', label: 'Logs', component: Logs },
     { id: 'config', label: 'Configuración', component: props => html`<${Placeholder} title="Configuración" phase="Fase 2" ...${props} />` },
