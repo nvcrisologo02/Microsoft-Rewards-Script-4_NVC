@@ -101,6 +101,15 @@ if ($LASTEXITCODE -ne 0) { Fail "El merge final a $MainBranch falló." }
 git branch -d $syncBranch
 
 Write-Host "[OK] Sincronizado: $pending commits de upstream integrados en $MainBranch." -ForegroundColor Green
+
+if ((git remote) -contains 'origin') {
+    git push origin $MainBranch
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host '[OK] Cambios subidos a origin.' -ForegroundColor Green
+    } else {
+        Write-Host "[AVISO] No se pudo hacer push a origin. Sube a mano con: git push origin $MainBranch" -ForegroundColor Yellow
+    }
+}
 if (Get-Command graphify -ErrorAction SilentlyContinue) {
     Write-Host '[INFO] Actualizando grafo de conocimiento (graphify update .)...'
     graphify update .
