@@ -1,4 +1,4 @@
-import { html, useEffect, useState } from '../vendor/htm-preact-standalone.module.js'
+import { html, useEffect, useMemo, useState } from '../vendor/htm-preact-standalone.module.js'
 import { api, ApiError } from '../api.js'
 import { toast } from '../toast.js'
 import { nextRuns, parseCron } from '../cron.js'
@@ -44,7 +44,10 @@ export function Programacion() {
 
     const writable = Boolean(schedule.writable)
     const cronValid = draft.cron !== '' && parseCron(draft.cron) !== null
-    const upcoming = cronValid && draft.enabled ? nextRuns(draft.cron, new Date(), 5) : []
+    const upcoming = useMemo(
+        () => (cronValid && draft.enabled ? nextRuns(draft.cron, new Date(), 5) : []),
+        [draft.cron, draft.enabled, cronValid]
+    )
     const setField = patch => setDraft(d => ({ ...d, ...patch }))
 
     const toggleExcluded = index => setDraft(d => ({
@@ -61,10 +64,10 @@ export function Programacion() {
         }
         setSaving(true)
         try {
-            // The server rejects an empty cron string even when disabling —
-            // omit the field entirely when the input is blank.
+            // Omit cron when invalid or blank — server rejects invalid cron
+            // even when schedule is disabled.
             const body = { ...draft }
-            if (body.cron === '') delete body.cron
+            if (!cronValid) delete body.cron
             const updated = await api('/schedule', { method: 'PATCH', body })
             setSchedule(updated)
             toast('Programación aplicada')
