@@ -16,13 +16,24 @@ const FIELD_ORDER = [
     'SAVE_FINGERPRINT_DESKTOP'
 ]
 const SECRET_FIELDS = new Set(['PASSWORD', 'TOTP_SECRET', 'PROXY_PASSWORD'])
-const LINE_RE = /^ACCOUNT_(\d+)_([A-Z0-9_]+)=(.*)$/
+const LINE_RE = /^ACCOUNT_(\d+)_([A-Z0-9_]+)\s*=\s*(.*)$/
 
 export class AccountEditorError extends Error {
     constructor(status, message) {
         super(message)
         this.status = status
     }
+}
+
+// Mirrors lib.js#loadEnvFile's value handling exactly, so an account read
+// through this module and one loaded into process.env at boot agree:
+// trim, then strip one matching pair of surrounding double or single quotes.
+function normalizeEnvValue(raw) {
+    let value = raw.trim()
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+    }
+    return value
 }
 
 export function readEnvAccounts(envPath) {
@@ -34,7 +45,7 @@ export function readEnvAccounts(envPath) {
         if (!m) continue
         const index = Number(m[1])
         if (!slots.has(index)) slots.set(index, {})
-        slots.get(index)[m[2]] = m[3]
+        slots.get(index)[m[2]] = normalizeEnvValue(m[3])
     }
     const accounts = [...slots.entries()].sort((a, b) => a[0] - b[0]).map(([index, fields]) => ({ index, fields }))
     return { lines, accounts }

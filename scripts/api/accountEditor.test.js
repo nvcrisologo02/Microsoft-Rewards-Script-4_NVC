@@ -224,6 +224,63 @@ test('deleting account 1 in [1,3] file densely renumbers to [1]', () => {
     }
 })
 
+test('readEnvAccounts strips surrounding quotes and tolerates spaces around =, matching loadEnvFile', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=quoted@example.com',
+        'ACCOUNT_1_PASSWORD="my secret"',
+        '',
+        'ACCOUNT_2_EMAIL = spaced@example.com',
+        "ACCOUNT_2_PASSWORD = 'also secret'"
+    ].join('\n'))
+    try {
+        const { accounts } = readEnvAccounts(envPath)
+        assert.equal(accounts[0].fields.PASSWORD, 'my secret')
+        assert.equal(accounts[1].fields.EMAIL, 'spaced@example.com')
+        assert.equal(accounts[1].fields.PASSWORD, 'also secret')
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('refreshProcessEnv sets the unquoted password for quoted/spaced accounts', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=quoted@example.com',
+        'ACCOUNT_1_PASSWORD="my secret"',
+        '',
+        'ACCOUNT_2_EMAIL = spaced@example.com',
+        "ACCOUNT_2_PASSWORD = 'also secret'"
+    ].join('\n'))
+    try {
+        const env = {}
+        refreshProcessEnv(envPath, env)
+        assert.equal(env.ACCOUNT_1_PASSWORD, 'my secret')
+        assert.equal(env.ACCOUNT_2_EMAIL, 'spaced@example.com')
+        assert.equal(env.ACCOUNT_2_PASSWORD, 'also secret')
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
+test('editing a quoted/spaced account writes the value back unquoted (self-healing round-trip)', () => {
+    const { dir, envPath } = makeEnv([
+        'ACCOUNT_1_EMAIL=quoted@example.com',
+        'ACCOUNT_1_PASSWORD="my secret"',
+        '',
+        'ACCOUNT_2_EMAIL = spaced@example.com',
+        "ACCOUNT_2_PASSWORD = 'also secret'"
+    ].join('\n'))
+    try {
+        upsertAccount(envPath, 1, { email: 'quoted@example.com', recoveryEmail: 'r@example.com' })
+        const text = fs.readFileSync(envPath, 'utf8')
+        assert.match(text, /^ACCOUNT_1_PASSWORD=my secret$/m)
+        const { accounts } = readEnvAccounts(envPath)
+        assert.equal(accounts[0].fields.PASSWORD, 'my secret')
+        assert.equal(accounts[1].fields.EMAIL, 'spaced@example.com')
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+})
+
 test('refreshProcessEnv on [1,3] file sets ACCOUNT_3 but not ACCOUNT_2', () => {
     const { dir, envPath } = makeEnv([
         'ACCOUNT_1_EMAIL=first@example.com',
