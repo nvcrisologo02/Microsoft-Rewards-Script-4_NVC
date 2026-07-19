@@ -7,7 +7,7 @@ import { AreaChart, BarList } from '../chart.js'
 const RANGES = [
     { label: '30 días', days: 30 },
     { label: '90 días', days: 90 },
-    { label: 'Todo', days: 365 }
+    { label: '1 año', days: 365 }
 ]
 
 function fmtDate(iso) {
@@ -25,12 +25,13 @@ function fmtDuration(run) {
 export function Ejecuciones({ state }) {
     const [runs, setRuns] = useState(null)
     const [persisted, setPersisted] = useState(true)
+    const [file, setFile] = useState(null)
     const [range, setRange] = useState(RANGES[0])
     const [open, setOpen] = useState(null)
 
     const load = () => {
         api('/history?persisted=1&limit=500')
-            .then(d => { setRuns(d.runs ?? []); setPersisted(true) })
+            .then(d => { setRuns(d.runs ?? []); setPersisted(true); setFile(d.file ?? null) })
             .catch(() => {
                 api('/history')
                     .then(d => { setRuns(d.runs ?? []); setPersisted(false) })
@@ -59,7 +60,7 @@ export function Ejecuciones({ state }) {
     return html`<section class="view">
         <h1>Ejecuciones</h1>
         <p class="sub">${persisted
-            ? 'Historial persistente · data/history.ndjson'
+            ? `Historial persistente · ${file ?? 'data/history.ndjson'}`
             : 'Historial en memoria (se pierde al reiniciar la API)'} · ${runs.length} runs</p>
         <div class="card" style="margin-bottom:12px">
             <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -79,8 +80,10 @@ export function Ejecuciones({ state }) {
                     ${inRange.slice(0, 50).map(r => {
                         const ok = (r.accounts ?? []).filter(a => a.success === true).length
                         const fail = (r.accounts ?? []).filter(a => a.success === false).length
-                        return html`<tr key=${r.startedAt} style="cursor:pointer"
-                            onClick=${() => setOpen(open === r.startedAt ? null : r.startedAt)}>
+                        return html`<tr key=${r.startedAt} style="cursor:pointer" tabIndex="0"
+                            aria-expanded=${open === r.startedAt}
+                            onClick=${() => setOpen(open === r.startedAt ? null : r.startedAt)}
+                            onKeyDown=${e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(open === r.startedAt ? null : r.startedAt) } }}>
                             <td class="em">${fmtDate(r.startedAt)}</td>
                             <td>${fmtDuration(r)}</td>
                             <td class="num">+${(r.collected ?? 0).toLocaleString('es')}</td>

@@ -60,9 +60,12 @@ export function AreaChart({ data, height = 220, ariaLabel }) {
                 <circle cx=${X(hover)} cy=${Y(data[hover].points)} r="4" fill=${ACCENT}
                     stroke="var(--surface)" stroke-width="2" />`}
         </svg>
-        ${hover != null && html`<div style=${`position:absolute;pointer-events:none;left:${X(hover) / w * 100}%;top:0;transform:translate(-50%,-4px);background:#0b0d11;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:11.5px var(--mono);white-space:nowrap`}>
+        ${hover != null && (() => {
+            const leftPct = Math.min(94, Math.max(6, X(hover) / w * 100))
+            return html`<div style=${`position:absolute;pointer-events:none;left:${leftPct}%;top:0;transform:translate(-50%,-4px);background:#0b0d11;border:1px solid var(--border);border-radius:8px;padding:5px 10px;font:11.5px var(--mono);white-space:nowrap`}>
             ${data[hover].label} · <b style="color:#8ab4ff">+${data[hover].points.toLocaleString('es')} pts</b>
-        </div>`}
+        </div>`
+        })()}
     </div>`
 }
 
