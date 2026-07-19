@@ -29,6 +29,7 @@ import type { Account } from './interface/Account'
 import HttpClient from './util/Http'
 import { sendDiscord, flushDiscordQueue } from './logging/Discord'
 import { sendNtfy, flushNtfyQueue } from './logging/Ntfy'
+import { sendTelegram, flushTelegramQueue } from './logging/Telegram'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
 
@@ -63,7 +64,7 @@ export function getCurrentContext(): ExecutionContext {
 }
 
 async function flushAllWebhooks(timeoutMs = 5000): Promise<void> {
-    await Promise.allSettled([flushDiscordQueue(timeoutMs), flushNtfyQueue(timeoutMs)])
+    await Promise.allSettled([flushDiscordQueue(timeoutMs), flushNtfyQueue(timeoutMs), flushTelegramQueue(timeoutMs)])
     closeSessionStore()
 }
 
@@ -139,6 +140,10 @@ export class MicrosoftRewardsBot {
 
     get isMobile(): boolean {
         return getCurrentContext().isMobile
+    }
+
+    get currentAccountEmail(): string | null {
+        return getCurrentContext().account?.email || null
     }
 
     async initialize(): Promise<void> {
@@ -243,6 +248,9 @@ export class MicrosoftRewardsBot {
                         if (webhook.ntfy?.enabled && webhook.ntfy.url) {
                             sendNtfy(webhook.ntfy, content, level)
                         }
+                        if (webhook.telegram?.enabled && webhook.telegram.botToken && webhook.telegram.chatId) {
+                            sendTelegram(webhook.telegram, content, level)
+                        }
                     }
                 })
 
@@ -310,7 +318,7 @@ export class MicrosoftRewardsBot {
         this.logger.info(
             'main',
             'RUN-END',
-            `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+            `Completed all accounts | accountsProcessed=${allAccountStats.length} | pointsGained=${totalCollectedPoints} | previousBalance=${totalInitialPoints} | currentBalance=${totalFinalPoints} | runtimeMinutes=${totalDurationMinutes}`,
             'green'
         )
 
@@ -409,7 +417,7 @@ export class MicrosoftRewardsBot {
                     this.logger.info(
                         'main',
                         'ACCOUNT-END',
-                        `Completed account: ${accountEmail} | Total: +${collectedPoints} | Old: ${accountInitialPoints} → New: ${accountFinalPoints} | Duration: ${durationSeconds}s`,
+                        `Completed account: ${accountEmail} | pointsGained=${collectedPoints} | previousBalance=${accountInitialPoints} | currentBalance=${accountFinalPoints} | durationSeconds=${durationSeconds}`,
                         'green'
                     )
                 } else {
@@ -454,7 +462,7 @@ export class MicrosoftRewardsBot {
             this.logger.info(
                 'main',
                 'RUN-END',
-                `Completed all accounts | Accounts processed: ${accountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
+                `Completed all accounts | accountsProcessed=${accountStats.length} | pointsGained=${totalCollectedPoints} | previousBalance=${totalInitialPoints} | currentBalance=${totalFinalPoints} | runtimeMinutes=${totalDurationMinutes}`,
                 'green'
             )
 
@@ -577,7 +585,7 @@ export class MicrosoftRewardsBot {
                         await executionContext.run({ isMobile: false, account }, async () => {
                             desktopSession = await this.createDesktopSession(account)
                             await this.punchcardManager.runDesktop()
-                            if (doVisualSearch) await this.activities.doVisualSearch()
+                            if (doVisualSearch) await this.activities.doVisualSearch(data)
                         })
 
                         await executionContext.run({ isMobile: false, account }, async () => {
@@ -618,7 +626,7 @@ export class MicrosoftRewardsBot {
                             await executionContext.run({ isMobile: false, account }, async () => {
                                 desktopSession = await this.createDesktopSession(account)
                                 await this.punchcardManager.runDesktop()
-                                if (doVisualSearch) await this.activities.doVisualSearch()
+                                if (doVisualSearch) await this.activities.doVisualSearch(data)
                             })
                         }
 
@@ -661,7 +669,7 @@ export class MicrosoftRewardsBot {
                                 desktopSession = await this.createDesktopSession(account)
 
                                 await this.punchcardManager.runDesktop()
-                                if (doVisualSearch) await this.activities.doVisualSearch()
+                                if (doVisualSearch) await this.activities.doVisualSearch(data)
                                 if (doDesktopSearch && !apiSearch) {
                                     desktopPoints = await this.searchManager.searchDesktop(account)
                                 }
@@ -687,12 +695,16 @@ export class MicrosoftRewardsBot {
                     }`
                 )
 
-                if (this.config.workers.doClaimBonusPoints) await this.workers.doClaimBonusPoints(data)
+                if (this.config.workers.doClaimBonusPoints) await this.workers.doClaimBonusPoints()
 
                 const finalPoints = await this.browser.func.getCurrentPoints()
                 const collectedPoints = finalPoints - initialPoints
 
-                this.logger.info('main', 'FLOW', `Collected: +${collectedPoints} | ${accountEmail}`)
+                this.logger.info(
+                    'main',
+                    'FLOW',
+                    `Points collected | pointsGained=${collectedPoints} | currentBalance=${finalPoints} | account=${accountEmail}`
+                )
 
                 return {
                     initialPoints,
