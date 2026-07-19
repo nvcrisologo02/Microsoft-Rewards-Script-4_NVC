@@ -72,6 +72,7 @@ function open() {
         const headers = token ? { Authorization: `Bearer ${token}` } : {}
         fetch('/health', { headers }).then(res => {
             probing = false
+            if (!started) return
             if (res.status === 401) {
                 started = false
                 authLostCb?.()
@@ -81,6 +82,7 @@ function open() {
             retryMs = Math.min(retryMs * 2, 30000)
         }).catch(() => {
             probing = false
+            if (!started) return
             retryTimer = setTimeout(open, retryMs)
             retryMs = Math.min(retryMs * 2, 30000)
         })
@@ -96,6 +98,7 @@ export function connect({ onAuthLost } = {}) {
 
 export function disconnect() {
     started = false
+    authLostCb = null
     if (retryTimer) clearTimeout(retryTimer)
     if (es) es.close()
     es = null
