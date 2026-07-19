@@ -9,6 +9,7 @@ import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAcc
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
 import { readSchedule, writeSchedule } from './scheduleStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
+import { createUiHandler } from './staticServer.js'
 import { resolveRunCommand } from './runCommand.js'
 import {
     log,
@@ -66,6 +67,8 @@ const pm = new ProcessManager({
     name: pkgName,
     version: pkgVersion
 })
+
+const serveUi = createUiHandler({ root: path.join(__dirname, 'ui') })
 
 const startedAt = Date.now()
 
@@ -226,6 +229,10 @@ const requestHandler = async (req, res) => {
         return res.end()
     }
 
+    // Dashboard SPA: static assets are served without a token. Every data
+    // endpoint the SPA calls still goes through the auth gate below.
+    if (serveUi(req, res, pathname)) return
+
     if (TOKEN && !isAuthorized(req, url)) {
         return sendJson(res, 401, {
             error: 'Unauthorized',
@@ -243,6 +250,7 @@ const requestHandler = async (req, res) => {
                 authRequired: Boolean(TOKEN),
                 stateless: true,
                 endpoints: [
+                    'GET /ui (dashboard)',
                     'GET /health',
                     'GET /status',
                     'GET /points',
