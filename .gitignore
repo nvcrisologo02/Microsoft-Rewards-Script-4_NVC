@@ -11,3 +11,6 @@ note
 .playwright-chromium-installed
 .stfolder/
 .env
+
+# graphify knowledge-graph output (local tooling, not part of the project)
+graphify-out/
