@@ -30,6 +30,7 @@ import HttpClient from './util/Http'
 import { sendDiscord, flushDiscordQueue } from './logging/Discord'
 import { sendNtfy, flushNtfyQueue } from './logging/Ntfy'
 import { sendTelegram, flushTelegramQueue } from './logging/Telegram'
+import { sendEmail, emailEnabled } from './logging/Email'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
 
@@ -179,6 +180,16 @@ export class MicrosoftRewardsBot {
             `Starting Microsoft Rewards Script | v${pkg.version} | Accounts: ${totalAccounts} | Clusters: ${this.config.clusters}`
         )
 
+        if (emailEnabled()) {
+            void sendEmail(
+                `Rewards: run iniciado (${totalAccounts} cuentas)`,
+                `El bot de Microsoft Rewards ha arrancado.\n\n` +
+                    `Cuentas: ${totalAccounts}\n` +
+                    `Clusters: ${this.config.clusters}\n` +
+                    `Hora de inicio: ${new Date().toLocaleString('es-ES')}`
+            )
+        }
+
         if (this.config.clusters > 1) {
             if (cluster.isPrimary) {
                 await this.runMaster(runStartTime)
@@ -208,6 +219,35 @@ export class MicrosoftRewardsBot {
             undefined,
             { skipWebhook: true }
         )
+    }
+
+    private async sendSummaryEmail(stats: AccountStats[], runStartTime: number): Promise<void> {
+        if (!emailEnabled()) return
+
+        const totalCollected = stats.reduce((sum, s) => sum + s.collectedPoints, 0)
+        const totalFinal = stats.reduce((sum, s) => sum + s.finalPoints, 0)
+        const okCount = stats.filter(s => s.success).length
+        const totalMinutes = ((Date.now() - runStartTime) / 1000 / 60).toFixed(1)
+
+        const detail = stats
+            .map(
+                s =>
+                    `${s.success ? '[OK]' : '[X]'} ${s.email} | +${s.collectedPoints} pts | balance ${s.finalPoints}${
+                        s.error ? ` | ${s.error}` : ''
+                    }`
+            )
+            .join('\n')
+
+        const body =
+            `Resumen de la ejecucion de Microsoft Rewards\n\n` +
+            `Cuentas correctas: ${okCount}/${stats.length}\n` +
+            `Puntos ganados: +${totalCollected}\n` +
+            `Balance total: ${totalFinal}\n` +
+            `Duracion: ${totalMinutes} min\n` +
+            `Fin: ${new Date().toLocaleString('es-ES')}\n\n` +
+            `Detalle por cuenta:\n${detail}\n`
+
+        await sendEmail(`Rewards: resumen ${okCount}/${stats.length} (+${totalCollected} pts)`, body)
     }
 
     private async runMaster(runStartTime: number): Promise<void> {
@@ -322,6 +362,7 @@ export class MicrosoftRewardsBot {
             'green'
         )
 
+        await this.sendSummaryEmail(allAccountStats, runStartTime)
         await flushAllWebhooks()
         process.exit(hadWorkerFailure ? 1 : 0)
     }
@@ -466,6 +507,7 @@ export class MicrosoftRewardsBot {
                 'green'
             )
 
+            await this.sendSummaryEmail(accountStats, runStartTime)
             await flushAllWebhooks()
             process.exit(0)
         }
