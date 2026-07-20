@@ -20,6 +20,21 @@ export TZ="${TZ:-UTC}"
 
 cd /usr/src/microsoft-rewards-script
 
+# ── Optional per-day-type scheduling ──────────────────────────────────────────
+# When invoked by cron (SCHEDULED_TRIGGER=1) and RUN_WEEKDAY_HOUR / RUN_WEEKEND_HOUR
+# are set, only proceed at the hour matching the current day type. This lets a
+# single CRON_SCHEDULE such as "0 7,10 * * *" run at 07h on weekdays and 10h at
+# weekends. Manual / RUN_ON_START invocations (no SCHEDULED_TRIGGER) are unaffected.
+if [ "${SCHEDULED_TRIGGER:-}" = "1" ]; then
+    _dow=$(date +%u)   # 1=Mon … 6=Sat 7=Sun
+    _hour=$(date +%H)
+    if [ "$_dow" -ge 6 ]; then _want="${RUN_WEEKEND_HOUR:-}"; else _want="${RUN_WEEKDAY_HOUR:-}"; fi
+    if [ -n "${_want}" ] && [ "${_hour}" != "${_want}" ]; then
+        echo "[$(date)] [run_daily.sh] Skipping cron trigger at ${_hour}h — this day runs at ${_want}h."
+        exit 0
+    fi
+fi
+
 LOCKFILE=/tmp/run_daily.lock
 
 # -------------------------------
