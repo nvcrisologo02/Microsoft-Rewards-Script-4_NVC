@@ -118,6 +118,22 @@ export function Resumen({ state }) {
                     </li>`)}</ul>`}
             </div>
         </div>
+        <div class="card" style="margin-top:16px">
+            <b style="font-size:13.5px">Puntos por cuenta</b>
+            ${accounts.length === 0
+                ? html`<p style="color:var(--ink-3);font-size:13px;margin:8px 0 0">Sin datos todavía. Ejecuta un run para ver los puntos y la racha de cada cuenta.</p>`
+                : html`<table style="margin-top:8px">
+                    <thead><tr><th>Cuenta</th><th class="num">Puntos</th><th class="num">Racha</th><th class="num">Último +</th></tr></thead>
+                    <tbody>
+                    ${accounts.map(a => html`<tr key=${a.index}>
+                        <td class="em">${a.email}</td>
+                        <td class="num">${fmt(a.lastBalance)}</td>
+                        <td class="num" title="Racha diaria de Microsoft Rewards">${a.streakCounter != null ? `🔥 ${fmt(a.streakCounter)}` : '—'}</td>
+                        <td class="num">${a.lastCollected != null ? `+${fmt(a.lastCollected)}` : '—'}</td>
+                    </tr>`)}
+                    </tbody>
+                </table>`}
+        </div>
         ${picker && html`<${AccountPicker} accounts=${accounts} onClose=${() => setPicker(false)} />`}
     </section>`
 }

@@ -123,4 +123,13 @@ function App() {
     </div>`
 }
 
+// Permite autenticar desde la URL (.../ui#token=XXX): guarda el token en
+// localStorage y lo elimina de la barra de direcciones antes de montar la app.
+const urlToken = new URLSearchParams(location.hash.slice(1)).get('token')
+    || new URLSearchParams(location.search).get('token')
+if (urlToken) {
+    setToken(urlToken.trim())
+    history.replaceState(null, '', location.pathname)
+}
+
 render(html`<${App} />`, document.getElementById('root'))

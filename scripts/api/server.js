@@ -105,6 +105,7 @@ function toHistoryRecord(entry) {
         accounts: (entry.run?.accounts ?? []).map(a => ({
             email: a.email,
             collected: a.collectedPoints ?? a.live?.gained ?? 0,
+            balance: a.finalPoints ?? a.live?.balance ?? null,
             success: a.success,
             error: a.error,
             streakProtection: a.streakProtection ?? null

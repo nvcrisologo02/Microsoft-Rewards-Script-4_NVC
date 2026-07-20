@@ -189,9 +189,13 @@ export function mergeAccountStats(accounts, runs) {
             successStreak,
             lastRunAt: last?.when ?? null,
             lastCollected: last?.collected ?? null,
+            lastBalance: last?.balance ?? null,
             lastSuccess: last ? last.success : null,
             lastError: last?.error ?? null,
-            streakProtection
+            streakProtection,
+            // Microsoft's real daily streak counter (from the rewards snapshot),
+            // distinct from successStreak which counts consecutive successful runs.
+            streakCounter: streakProtection?.streakCounter ?? null
         }
     })
 }

@@ -149,7 +149,21 @@ function writeEnvAccounts(envPath, priorLines, accounts) {
     if (fs.existsSync(envPath)) fs.copyFileSync(envPath, envPath + '.bak')
     const tmp = `${envPath}.tmp-${process.pid}`
     fs.writeFileSync(tmp, text)
-    fs.renameSync(tmp, envPath)
+    try {
+        // Atomic replace on a normal filesystem.
+        fs.renameSync(tmp, envPath)
+    } catch (err) {
+        // A single-file bind mount (e.g. Docker `- ./.env:/…/.env`) is its own
+        // mount point, so rename() over it fails with EBUSY/EXDEV. Fall back to
+        // an in-place write; the .bak copy above preserves the prior contents.
+        if (err && (err.code === 'EBUSY' || err.code === 'EXDEV')) {
+            fs.writeFileSync(envPath, text)
+        } else {
+            try { fs.unlinkSync(tmp) } catch { /* best effort */ }
+            throw err
+        }
+        try { fs.unlinkSync(tmp) } catch { /* best effort */ }
+    }
 }
 
 export function upsertAccount(envPath, targetIndex, body = {}) {

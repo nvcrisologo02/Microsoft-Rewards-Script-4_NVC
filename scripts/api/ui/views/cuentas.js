@@ -23,7 +23,23 @@ function AccountModal({ initial, onClose, onSaved }) {
         proxyHttp: initial?.proxy?.http ?? false
     })
     const [saving, setSaving] = useState(false)
+    const [clearing, setClearing] = useState(false)
     const set = key => e => setForm(f => ({ ...f, [key]: e.target.value }))
+
+    const clearSessions = async () => {
+        if (!confirm(`¿Borrar los datos de sesión de ${initial.email}? Tendrá que iniciar sesión de nuevo en el próximo run.`)) return
+        setClearing(true)
+        try {
+            const res = await api(`/sessions/${encodeURIComponent(initial.email)}`, { method: 'DELETE' })
+            toast(`Datos de sesión borrados (${res.removed ?? 'ok'})`)
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 409) toast('No se puede borrar con un run activo.', 'err')
+            else if (err instanceof ApiError && err.status === 404) toast('Esta cuenta no tiene sesiones guardadas.', 'err')
+            else toast('Error al borrar los datos de sesión.', 'err')
+        } finally {
+            setClearing(false)
+        }
+    }
 
     const save = async () => {
         setSaving(true)
@@ -94,8 +110,13 @@ function AccountModal({ initial, onClose, onSaved }) {
                     placeholder=${secretPlaceholder(initial?.proxy?.hasPassword)} aria-label="Proxy contraseña" />
             </div>
             <p style="font-size:11.5px;color:var(--ink-3);margin:14px 0 0;border-top:1px solid var(--border);padding-top:10px">
-                Se reescribe .env de forma atómica con copia previa en .env.bak. Los secretos nunca se vuelven a mostrar.
+                Se reescribe .env con copia previa en .env.bak. Los secretos nunca se vuelven a mostrar.
             </p>
+            ${isEdit && html`<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <button class="btn danger sm" disabled=${clearing} onClick=${clearSessions}>
+                    ${clearing ? 'Borrando…' : '🗑 Borrar datos de sesión'}</button>
+                <span style="font-size:11.5px;color:var(--ink-3)">Úsalo si esta cuenta falla al iniciar sesión: fuerza un login limpio en el próximo run.</span>
+            </div>`}
             <div class="savebar">
                 <button class="btn" onClick=${onClose}>Cancelar</button>
                 <button class="btn primary" disabled=${saving} onClick=${save}>${isEdit ? 'Guardar cambios' : 'Guardar cuenta'}</button>
@@ -195,7 +216,7 @@ export function Cuentas({ state }) {
                 <button class="btn primary" onClick=${openNew}>+ Añadir cuenta</button>
             </div>
             <table>
-                <thead><tr><th>Cuenta</th><th>Región</th><th class="num">Recogido</th><th class="num">Racha</th>
+                <thead><tr><th>Cuenta</th><th>Región</th><th class="num">Puntos</th><th class="num">Recogido</th><th class="num">Racha</th>
                     <th>Sesiones</th><th>Último run</th><th></th></tr></thead>
                 <tbody>
                 ${list.map(a => {
@@ -203,8 +224,9 @@ export function Cuentas({ state }) {
                     return html`<tr key=${a.index}>
                         <td class="em">${a.email}</td>
                         <td>${a.geoLocale ?? '—'}</td>
+                        <td class="num">${fmt(a.lastBalance)}</td>
                         <td class="num">${fmt(a.totalCollected)}</td>
-                        <td class="num">${fmt(a.successStreak)}</td>
+                        <td class="num" title="Racha diaria de Microsoft Rewards">${a.streakCounter != null ? `🔥 ${fmt(a.streakCounter)}` : '—'}</td>
                         <td><span class=${'sess' + (s.desktop ? ' has' : '')}>D</span>${' '}
                             <span class=${'sess' + (s.mobile ? ' has' : '')}>M</span></td>
                         <td>${a.lastSuccess === true ? html`<span class="badge ok">✓ ${a.lastCollected != null ? `+${fmt(a.lastCollected)}` : 'ok'}</span>`
