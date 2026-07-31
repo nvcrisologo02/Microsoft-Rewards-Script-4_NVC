@@ -38,6 +38,15 @@ test('two ledger instances share the same file (cross-account view)', () => {
     assert.ok(b.load().has('quijote'))
 })
 
+test('record() degrades silently when the base dir is unwritable', () => {
+    // A regular file where the ledger expects a directory: mkdirSync throws ENOTDIR/EEXIST
+    const collision = path.join(tmpDir(), 'not-a-dir')
+    fs.writeFileSync(collision, 'occupied', 'utf-8')
+    const ledger = new SearchQueryLedger(collision)
+    assert.doesNotThrow(() => ledger.record('consulta perdida'))
+    assert.strictEqual(ledger.load().size, 0)
+})
+
 test('cleanup() removes files older than maxAgeDays and keeps today', () => {
     const dir = tmpDir()
     const ledger = new SearchQueryLedger(dir)
