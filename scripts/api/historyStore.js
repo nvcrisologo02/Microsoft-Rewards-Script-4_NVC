@@ -39,6 +39,19 @@ export function appendRun(projectRoot, record) {
     return true
 }
 
+// Merge in-memory runs (lost on restart) with persisted NDJSON runs so
+// account stats survive container restarts. Memory wins on same startedAt.
+export function combineRuns(memoryRuns, persistedRuns) {
+    const byStart = new Map()
+    for (const source of [persistedRuns, memoryRuns]) {
+        for (const run of source || []) {
+            if (!run || typeof run.startedAt !== 'string') continue
+            byStart.set(run.startedAt, run)
+        }
+    }
+    return [...byStart.values()].sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1))
+}
+
 export function readRuns(projectRoot, { limit = 100, offset = 0 } = {}) {
     const all = readAll(projectRoot)
     const newestFirst = all.slice().reverse()

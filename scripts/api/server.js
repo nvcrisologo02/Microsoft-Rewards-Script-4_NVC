@@ -8,7 +8,7 @@ import { ProcessManager } from './processManager.js'
 import { buildExcludedAccountsEnv, buildSingleAccountEnv, loadAccounts, mergeAccountStats } from './accounts.js'
 import { validateConfig, deepMerge, readConfig, writeConfigAtomic } from './configEditor.js'
 import { readSchedule, writeSchedule, remapExclusionsAfterDelete } from './scheduleStore.js'
-import { appendRun, historyFilePath, readRuns } from './historyStore.js'
+import { appendRun, combineRuns, historyFilePath, readRuns } from './historyStore.js'
 import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
 import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
@@ -392,9 +392,10 @@ const requestHandler = async (req, res) => {
             return sendJson(res, 200, { runs, count: runs.length, inMemoryOnly: true })
         }
 
-        // account overview
+        // account overview (memory + persisted history, so stats survive restarts)
         if (method === 'GET' && pathname === '/accounts') {
-            const accounts = mergeAccountStats(loadAccounts(), pm.getHistory().map(toHistoryRecord))
+            const runs = combineRuns(pm.getHistory().map(toHistoryRecord), readRuns(projectRoot, { limit: 100 }).runs)
+            const accounts = mergeAccountStats(loadAccounts(), runs)
             return sendJson(res, 200, { accounts, count: accounts.length })
         }
 
