@@ -107,17 +107,43 @@ export class Workers {
                 for (const child of card.childPromotions ?? []) knownIds.add(child.offerId)
             }
 
-            const candidates = (this.bot.reactSnapshot?.offers ?? [])
+            const offers = this.bot.reactSnapshot?.offers ?? []
+            const reportableOffers = offers.filter(offer => offer.reportable && !offer.isCompleted)
+            let skippedKnown = 0
+            let skippedZeroPoints = 0
+            const candidates = reportableOffers
                 .filter(offer => {
-                    if (!offer.reportable || offer.isCompleted) return false
-                    if (knownIds.has(offer.offerId)) return false
-                    if (this.bot.config.skipNonPointTasks && offer.points <= 0) return false
+                    if (knownIds.has(offer.offerId)) {
+                        skippedKnown++
+                        return false
+                    }
+                    if (this.bot.config.skipNonPointTasks && offer.points <= 0) {
+                        skippedZeroPoints++
+                        return false
+                    }
                     return true
                 })
                 .slice(0, MAX_SWEEP_OFFERS)
 
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'EARN-SWEEP',
+                `Sweep summary | snapshotOffers=${offers.length} | reportable=${reportableOffers.length} | candidates=${candidates.length} | skippedKnown=${skippedKnown} | skippedZeroPoints=${skippedZeroPoints}`
+            )
+
             if (!candidates.length) {
-                this.bot.logger.debug(this.bot.isMobile, 'EARN-SWEEP', 'No uncovered reportable offers in the earn snapshot')
+                if (reportableOffers.length) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'EARN-SWEEP',
+                        `Reportable but excluded | ${reportableOffers
+                            .map(
+                                offer =>
+                                    `${offer.offerId}[points=${offer.points} known=${knownIds.has(offer.offerId)}] "${offer.title}"`
+                            )
+                            .join(', ')}`
+                    )
+                }
                 return
             }
 
