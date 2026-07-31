@@ -16,6 +16,30 @@ const MAX_LINK_OFFERS = 6
 // the form code while logged in. Completed ones are marked with rnoreward=1 in the href.
 const LINK_OFFER_PATTERN = /https:\/\/(?:www\.)?bing\.com\/[^"'\s\\<>]*PROGRAMNAME=[^"'\s\\<>]*/g
 
+export function linkOfferVisitKey(email: string, url: string): string {
+    const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
+    return `${email}|${form}`.toLowerCase()
+}
+
+export function filterLinkOfferUrls(rawUrls: string[]): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+
+    for (const raw of rawUrls) {
+        const url = raw.trim()
+        if (!/PROGRAMNAME=/i.test(url)) continue
+        if (/rnoreward=1/i.test(url)) continue
+
+        // Cards can share the same offer (e.g. both puzzles use form=ML2BF0) - dedupe by form code
+        const key = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1]?.toUpperCase() ?? url
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(url)
+    }
+
+    return out.slice(0, MAX_LINK_OFFERS)
+}
+
 export class Workers {
     public bot: MicrosoftRewardsBot
     private skippedTypes: { type: string; title: string; points: number }[] = []
@@ -258,7 +282,7 @@ export class Workers {
 
             const collected = await this.collectLinkOfferUrls(page)
             for (const url of collected) visitedLedger.record(this.linkOfferDiscoveryKey(url))
-            const urls = collected.filter(url => !visitedToday.has(this.linkOfferVisitKey(accountEmail, url)))
+            const urls = collected.filter(url => !visitedToday.has(linkOfferVisitKey(accountEmail, url)))
 
             if (!urls.length) {
                 this.bot.logger.info(
@@ -283,7 +307,7 @@ export class Workers {
             for (const url of urls) {
                 try {
                     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-                    visitedLedger.record(this.linkOfferVisitKey(accountEmail, url))
+                    visitedLedger.record(linkOfferVisitKey(accountEmail, url))
                     await this.bot.utils.wait(this.bot.utils.randomDelay(8000, 12000))
 
                     const newBalance = await this.bot.browser.func.getCurrentPoints()
@@ -351,7 +375,7 @@ export class Workers {
 
     private async collectLinkOfferUrls(page: Page): Promise<string[]> {
         const html = await this.bot.browser.func.getRewardsPageHtml(URLs.rewards.earn, '/earn')
-        let urls = this.filterLinkOfferUrls(
+        let urls = filterLinkOfferUrls(
             (html ?? '').replace(/&amp;/g, '&').replace(/\\u0026/gi, '&').match(LINK_OFFER_PATTERN) ?? []
         )
         if (urls.length) return urls
@@ -377,7 +401,7 @@ export class Workers {
             const hrefs = await page.$$eval('a[href*="PROGRAMNAME="]', links =>
                 links.map(link => (link as HTMLAnchorElement).href)
             )
-            urls = this.filterLinkOfferUrls(hrefs)
+            urls = filterLinkOfferUrls(hrefs)
 
             const totalAnchors = await page
                 .locator('a')
@@ -407,33 +431,9 @@ export class Workers {
         return urls
     }
 
-    private linkOfferVisitKey(email: string, url: string): string {
-        const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
-        return `${email}|${form}`.toLowerCase()
-    }
-
     private linkOfferDiscoveryKey(url: string): string {
         const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
         return `discovered|${form}`.toLowerCase()
-    }
-
-    private filterLinkOfferUrls(rawUrls: string[]): string[] {
-        const seen = new Set<string>()
-        const out: string[] = []
-
-        for (const raw of rawUrls) {
-            const url = raw.trim()
-            if (!/PROGRAMNAME=/i.test(url)) continue
-            if (/rnoreward=1/i.test(url)) continue
-
-            // Cards can share the same offer (e.g. both puzzles use form=ML2BF0) - dedupe by form code
-            const key = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1]?.toUpperCase() ?? url
-            if (seen.has(key)) continue
-            seen.add(key)
-            out.push(url)
-        }
-
-        return out.slice(0, MAX_LINK_OFFERS)
     }
 
     public async doAppPromotions(data: AppDashboardData) {
