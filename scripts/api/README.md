@@ -398,40 +398,40 @@ server itself remains dependency-free.
 
 ### Read endpoints
 
-| Method | Path                            | Purpose                                                           |
-| ------ | ------------------------------- | ----------------------------------------------------------------- |
-| `GET`  | `/`                             | API name, version, authentication state, and endpoint index.      |
-| `GET`  | `/health`                       | Lightweight liveness and process-state check.                     |
-| `GET`  | `/status`                       | Complete process and parsed run state.                            |
-| `GET`  | `/points`                       | Simplified live point totals for dashboard polling.               |
-| `GET`  | `/logs`                         | Buffered structured logs.                                         |
-| `GET`  | `/errors`                       | Recent warning/error logs and per-account failures.               |
-| `GET`  | `/history`                      | Completed runs retained by this API process.                      |
-| `GET`  | `/accounts`                     | Safe summaries of configured accounts and recent run statistics.  |
+| Method | Path                            | Purpose                                                                      |
+| ------ | ------------------------------- | ---------------------------------------------------------------------------- |
+| `GET`  | `/`                             | API name, version, authentication state, and endpoint index.                 |
+| `GET`  | `/health`                       | Lightweight liveness and process-state check.                                |
+| `GET`  | `/status`                       | Complete process and parsed run state.                                       |
+| `GET`  | `/points`                       | Simplified live point totals for dashboard polling.                          |
+| `GET`  | `/logs`                         | Buffered structured logs.                                                    |
+| `GET`  | `/errors`                       | Recent warning/error logs and per-account failures.                          |
+| `GET`  | `/history`                      | Completed runs retained by this API process.                                 |
+| `GET`  | `/accounts`                     | Safe summaries of configured accounts and recent run statistics.             |
 | `GET`  | `/accounts/:index`              | Editable non-sensitive fields of one account plus hasPassword/hasTotp flags. |
-| `GET`  | `/sessions`                     | Stored account/platform session metadata without secret contents. |
-| `GET`  | `/diagnostics`                  | List available error-capture directories.                         |
-| `GET`  | `/diagnostics/<capture>/<file>` | Download or view one diagnostic artifact.                         |
-| `GET`  | `/config`                       | Read `config.json`, redacted by default.                          |
-| `GET`  | `/schedule`                     | Read the effective cron schedule and its source.                  |
-| `GET`  | `/events`                       | SSE stream containing live logs and status updates.               |
+| `GET`  | `/sessions`                     | Stored account/platform session metadata without secret contents.            |
+| `GET`  | `/diagnostics`                  | List available error-capture directories.                                    |
+| `GET`  | `/diagnostics/<capture>/<file>` | Download or view one diagnostic artifact.                                    |
+| `GET`  | `/config`                       | Read `config.json`, redacted by default.                                     |
+| `GET`  | `/schedule`                     | Read the effective cron schedule and its source.                             |
+| `GET`  | `/events`                       | SSE stream containing live logs and status updates.                          |
 
 ### Control and write endpoints
 
-| Method   | Path               | Purpose                                                 |
-| -------- | ------------------ | ------------------------------------------------------- |
-| `POST`   | `/start`           | Start a bot run.                                        |
-| `POST`   | `/stop`            | Request graceful or forced process termination.         |
-| `POST`   | `/restart`         | Stop an active run, then start a new one.               |
-| `POST`   | `/shutdown`        | Stop the bot if needed and terminate the API process.   |
-| `DELETE` | `/sessions/:email` | Delete only one account's mobile and desktop sessions.  |
+| Method   | Path               | Purpose                                                                                                                         |
+| -------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/start`           | Start a bot run.                                                                                                                |
+| `POST`   | `/stop`            | Request graceful or forced process termination.                                                                                 |
+| `POST`   | `/restart`         | Stop an active run, then start a new one.                                                                                       |
+| `POST`   | `/shutdown`        | Stop the bot if needed and terminate the API process.                                                                           |
+| `DELETE` | `/sessions/:email` | Delete only one account's mobile and desktop sessions.                                                                          |
 | `POST`   | `/accounts`        | Create a new account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
-| `PUT`    | `/accounts/:index` | Update an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
-| `DELETE` | `/accounts/:index` | Delete an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
-| `PUT`    | `/config`          | Replace the complete config after validation.           |
-| `PATCH`  | `/config`          | Deep-merge a partial config after validation.           |
-| `PUT`    | `/schedule`        | Persist and immediately apply supplied schedule fields. |
-| `PATCH`  | `/schedule`        | Persist and immediately apply supplied schedule fields. |
+| `PUT`    | `/accounts/:index` | Update an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot.    |
+| `DELETE` | `/accounts/:index` | Delete an account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot.    |
+| `PUT`    | `/config`          | Replace the complete config after validation.                                                                                   |
+| `PATCH`  | `/config`          | Deep-merge a partial config after validation.                                                                                   |
+| `PUT`    | `/schedule`        | Persist and immediately apply supplied schedule fields.                                                                         |
+| `PATCH`  | `/schedule`        | Persist and immediately apply supplied schedule fields.                                                                         |
 
 Account editing requires the API to run against a real `.env` file (local mode, or Docker with a `.env` file mounted); when accounts are instead injected via compose `env_file:` variables with no matching `.env` on disk, the write routes return `409 ACCOUNTS_ENV_PROVIDED`.
 
@@ -787,11 +787,11 @@ By default, returns completed runs launched by the current API process from in-m
 
 Query parameters:
 
-| Parameter |           Default | Behavior                                                            |
-| --------- | ----------------: | ------------------------------------------------------------------- |
-| `persisted` |       `0` | When set to `1`, read from the persistent NDJSON file instead of in-memory history. |
-| `limit`   | `API_RUN_HISTORY` (in-memory), `100` (persisted) | In-memory mode: capped at `API_RUN_HISTORY`. Persisted mode: capped at `500`. |
-| `offset`  |       `0` | Number of records to skip (pagination). Only applies when `persisted=1`. Capped at 1,000,000. |
+| Parameter   |                                          Default | Behavior                                                                                      |
+| ----------- | -----------------------------------------------: | --------------------------------------------------------------------------------------------- |
+| `persisted` |                                              `0` | When set to `1`, read from the persistent NDJSON file instead of in-memory history.           |
+| `limit`     | `API_RUN_HISTORY` (in-memory), `100` (persisted) | In-memory mode: capped at `API_RUN_HISTORY`. Persisted mode: capped at `500`.                 |
+| `offset`    |                                              `0` | Number of records to skip (pagination). Only applies when `persisted=1`. Capped at 1,000,000. |
 
 **cURL - in-memory history (default)**
 
@@ -936,6 +936,12 @@ Session contents are authentication material. The API deliberately returns only
 safe metadata such as account, platform, update time, cookie count, and whether
 storage/fingerprint data exists. Cookie values, storage state, and fingerprint
 contents are never returned.
+
+The bot also writes two self-pruning history directories next to `sessions.db`:
+`search-history/` (search queries already used today, shared across accounts) and
+`link-offers-history/` (which "Keep earning" daily offers each account already
+visited today). They contain no credentials, are not exposed through the API, and
+deleting them only risks a repeated query or one redundant offer visit.
 
 ### `GET /sessions`
 
@@ -1975,7 +1981,7 @@ All variables are optional.
 | `API_ALLOW_ENV_OVERRIDES`  | `false`                       | Permit arbitrary `env` fields in `/start` and `/restart`.                                   |
 | `API_ALLOW_CONFIG_REVEAL`  | `false`                       | Permit authenticated `GET /config?reveal=1`.                                                |
 | `API_VALIDATOR_MODULE`     | auto                          | Path to a compiled module exporting `validateConfig` or `ConfigSchema`.                     |
-| `HISTORY_FILE`             | `<repo>/data/history.ndjson` | Override the persisted run-history file path.                                               |
+| `HISTORY_FILE`             | `<repo>/data/history.ndjson`  | Override the persisted run-history file path.                                               |
 | `SCHEDULE_FILE`            | `<repo>/config/schedule.json` | Override the persisted schedule file path.                                                  |
 | `CRON_SCHEDULE`            | unset                         | Base schedule reported and used when no persisted schedule override exists.                 |
 | `TZ`                       | `UTC`                         | Timezone used by cron and returned by `/schedule`.                                          |

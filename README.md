@@ -22,12 +22,19 @@
 - [Docker](#docker)
 - [Control API and Dashboard](#control-api-and-dashboard)
 - [Nix Setup](#nix-setup)
+- [How activities are claimed](#how-activities-are-claimed)
+    - [Daily set and more promotions](#daily-set-and-more-promotions)
+    - [Quizzes and puzzles](#quizzes-and-puzzles)
+    - ["Keep earning" daily offers](#keep-earning-daily-offers)
+    - [Earn snapshot sweep](#earn-snapshot-sweep)
+    - [Punchcards and quests](#punchcards-and-quests)
 - [Configuration Options](#configuration-options)
     - [Core](#core)
     - [Workers](#workers)
     - [Activities](#activities)
     - [Search Settings](#search-settings)
         - [Query sources](#query-sources)
+        - [Cross-account query dedup](#cross-account-query-dedup)
     - [Experimental](#experimental)
     - [Logging](#logging)
     - [Proxy](#proxy)
@@ -65,6 +72,14 @@ ACCOUNT_1_PASSWORD=your_password
 
 > [!NOTE]
 > Add one `ACCOUNT_N_*` block per account. Account slots do not need to be contiguous: `ACCOUNT_2` or `ACCOUNT_4` can be configured even when earlier slots are missing. Accounts run in ascending slot order. Optional per-account fields cover recovery email, locale (`ACCOUNT_N_GEO_LOCALE` defaults to `auto`, the locale of your Microsoft profile), language, proxy, and fingerprint persistence - see [`env.example`](env.example) for all of them.
+
+> [!IMPORTANT]
+> **Set `ACCOUNT_N_LANG_CODE` and `ACCOUNT_N_GEO_LOCALE` to your real market.** They do more than pick search topics: the browser context and fingerprint are created with that locale (e.g. `es` + `ES` → `es-ES`), and Rewards only serves some offers - notably the ["Keep earning" daily offers](#keep-earning-daily-offers) - to a browser whose locale matches the account's market. An account left on the default `en` may silently never see those cards.
+>
+> ```env
+> ACCOUNT_1_LANG_CODE=es
+> ACCOUNT_1_GEO_LOCALE=ES
+> ```
 
 > [!TIP]
 > For 2FA accounts, set `ACCOUNT_N_TOTP_SECRET` and the script will generate and enter the 6-digit code automatically. To get the secret: in your Microsoft Security settings open 'Manage how you sign in', add an Authenticator app, and when the QR code appears choose 'enter code manually' - use that code as the value in your `.env`.
@@ -173,6 +188,50 @@ If using Nix: `bash scripts/nix/run.sh`
 
 ---
 
+## How activities are claimed
+
+Rewards exposes the same offers through several different surfaces, and each one needs its own claiming mechanism. This section describes what the script does with each, so you can tell from the logs which path earned (or skipped) a given item.
+
+### Daily set and more promotions
+
+`doDailySet` and `doMorePromotions` read the dashboard API (`dailySetPromotions`, `morePromotions`) and dispatch each incomplete item by `promotionType`. Log tag: `DAILY-SET`, `MORE-PROMOTIONS`, `ACTIVITY`.
+
+| Type                            | Handled by                                      | Config flag               |
+| ------------------------------- | ----------------------------------------------- | ------------------------- |
+| `urlreward`                     | Reported through the server action              | `activities.urlReward`    |
+| `urlreward` named ExploreOnBing | Bing searches for the offer's terms             | `activities.searchOnBing` |
+| `quiz`                          | See [Quizzes and puzzles](#quizzes-and-puzzles) | `activities.quiz`         |
+| anything else                   | Skipped with a warning naming the type          | -                         |
+
+### Quizzes and puzzles
+
+Quiz-type activities ("Do you know the answer?", image puzzles, quote of the day when they appear in the daily set) are solved by a three-phase solver that stops as soon as points are credited. Log tag: `QUIZ`.
+
+1. **Server action** - reports the offer exactly like a URL reward, using the live hash from the `/earn` React snapshot. Waits a few seconds and re-reads the balance before deciding it failed, so a slow credit is not mistaken for a failure.
+2. **Legacy quiz API** - one `bingqa/ReportActivity` call per question, using the same cookie jar, IG token and headers as the proven search-report path. Stops as soon as a call earns nothing.
+3. **Browser fallback** - opens the offer's destination and clicks through: "skip puzzle" if present, otherwise any answer option (on the modern dashboard every answer leads to the completed state).
+
+If the session turns out to be stale (reported but not acknowledged), the solver repairs the session once and retries phase 1 before descending. Set `activities.quiz` to `false` to disable the whole solver.
+
+### "Keep earning" daily offers
+
+The "Keep earning" / "Seguir ganando" cards (news quiz, homepage quiz, image puzzle, quote of the day - typically +5 each) are **not** dashboard promotions: they are plain links to Bing daily offers (`PROGRAMNAME=BingDailyOfferIN`, `PROGRAMNAME=QuoteOfTheDay`) with no offerId and no hash. Bing credits them a few seconds after you _visit_ the URL while signed in. Log tag: `LINK-OFFERS`.
+
+During the desktop pass the script renders `/earn`, scrolls until the lazily-rendered section appears, collects the offer links, and visits the pending ones. Notes:
+
+- **Locale matters.** These cards are market-gated - see the warning in [Account Setup](#account-setup). With a mismatched locale the section renders without them and the log reads `No pending Bing link offers found on /earn`.
+- Completed offers are filtered two ways: the `rnoreward=1` marker Rewards adds to the href, and a per-account daily ledger at `<sessionPath>/link-offers-history/YYYY-MM-DD.ndjson` (so a second run the same day logs `already visited today, skipping`).
+- Credits arrive asynchronously, so the per-offer line often says "credit not reflected yet" and the real outcome is the `Link offers batch complete` summary logged after a settle delay.
+- Gated by `activities.quiz`.
+
+### Earn snapshot sweep
+
+Some offers appear in the `/earn` React snapshot with a live hash but never show up in the dashboard API. After more-promotions finishes (mobile pass, and again in the desktop pass) the script refreshes the snapshot and reports up to 10 such offers that no other flow owns. Log tag: `EARN-SWEEP`; the summary line reports how many candidates were found and why the rest were excluded.
+
+### Punchcards and quests
+
+Quests are solved from their own quest page. When a quest page renders no actionable children but the API punchcard data still carries incomplete children (as "Keep earning" does), those children are dispatched through the normal activity dispatcher instead of being dropped. Log tag: `PUNCHCARD`. Reward claiming is gated by `autoClaimPunchcardRewards`.
+
 ## Configuration Options
 
 Edit `config.json` to customize behavior, or set `CONFIG_*` environment variables in `compose.yaml` (Docker). Below are all currently available options.
@@ -215,29 +274,29 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 
 ### Activities
 
-| Setting                   | Type    | Default | Description                                         | Docker environment variable      |
-| ------------------------- | ------- | ------- | --------------------------------------------------- | -------------------------------- |
-| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                      | `CONFIG_ACTIVITY_URL_REWARD`     |
-| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                       | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
-| `activities.quiz`         | boolean | `true`  | Solve quiz/puzzle activities (hybrid API + browser) | `CONFIG_ACTIVITY_QUIZ`           |
+| Setting                   | Type    | Default | Description                                                                                                              | Docker environment variable      |
+| ------------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                                                                                           | `CONFIG_ACTIVITY_URL_REWARD`     |
+| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                                                                            | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
+| `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles) and claim ["Keep earning" daily offers](#keep-earning-daily-offers) | `CONFIG_ACTIVITY_QUIZ`           |
 
 ### Search Settings
 
-| Setting                                 | Type     | Default                             | Description                                                               | Docker environment variable        |
-| --------------------------------------- | -------- | ----------------------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
-| `searchSettings.scrollRandomResults`    | boolean  | `false`                             | Scroll randomly on results                                                | `CONFIG_SEARCH_SCROLL_RANDOM`      |
-| `searchSettings.clickRandomResults`     | boolean  | `false`                             | Click random links                                                        | `CONFIG_SEARCH_CLICK_RANDOM`       |
-| `searchSettings.runOnZeroPoints`        | boolean  | `false`                             | Run searches even when no search points remain                            | `CONFIG_SEARCH_RUN_ON_ZERO_POINTS` |
-| `searchSettings.maxBonusSearches`       | number   | `110`                               | Max bonus searches per run (when `doBonusSearches` is on)                 | `CONFIG_SEARCH_MAX_BONUS_SEARCHES` |
-| `searchSettings.parallelSearching`      | boolean  | `true`                              | Run searches in parallel                                                  | `CONFIG_SEARCH_PARALLEL`           |
-| `searchSettings.clusterSearch`          | boolean  | `true`                              | Cluster each main topic with Bing suggestions                             | `CONFIG_SEARCH_CLUSTER`            |
-| `searchSettings.queryEngines`           | string[] | see [Query sources](#query-sources) | Sources used to build the search query pool                               | `CONFIG_SEARCH_QUERY_ENGINES` \*   |
+| Setting                                 | Type     | Default                             | Description                                                               | Docker environment variable         |
+| --------------------------------------- | -------- | ----------------------------------- | ------------------------------------------------------------------------- | ----------------------------------- |
+| `searchSettings.scrollRandomResults`    | boolean  | `false`                             | Scroll randomly on results                                                | `CONFIG_SEARCH_SCROLL_RANDOM`       |
+| `searchSettings.clickRandomResults`     | boolean  | `false`                             | Click random links                                                        | `CONFIG_SEARCH_CLICK_RANDOM`        |
+| `searchSettings.runOnZeroPoints`        | boolean  | `false`                             | Run searches even when no search points remain                            | `CONFIG_SEARCH_RUN_ON_ZERO_POINTS`  |
+| `searchSettings.maxBonusSearches`       | number   | `110`                               | Max bonus searches per run (when `doBonusSearches` is on)                 | `CONFIG_SEARCH_MAX_BONUS_SEARCHES`  |
+| `searchSettings.parallelSearching`      | boolean  | `true`                              | Run searches in parallel                                                  | `CONFIG_SEARCH_PARALLEL`            |
+| `searchSettings.clusterSearch`          | boolean  | `true`                              | Cluster each main topic with Bing suggestions                             | `CONFIG_SEARCH_CLUSTER`             |
+| `searchSettings.queryEngines`           | string[] | see [Query sources](#query-sources) | Sources used to build the search query pool                               | `CONFIG_SEARCH_QUERY_ENGINES` \*    |
 | `searchSettings.crossAccountQueryDedup` | boolean  | `true`                              | Prevent the same search query being used by more than one account per day | `CONFIG_SEARCH_CROSS_ACCOUNT_DEDUP` |
-| `searchSettings.searchResultVisitTime`  | string   | `"10sec"`                           | Time to spend on each search result                                       | `CONFIG_SEARCH_VISIT_TIME`         |
-| `searchSettings.searchDelay.min`        | string   | `"30sec"`                           | Minimum delay between searches                                            | `CONFIG_SEARCH_DELAY_MIN`          |
-| `searchSettings.searchDelay.max`        | string   | `"1min"`                            | Maximum delay between searches                                            | `CONFIG_SEARCH_DELAY_MAX`          |
-| `searchSettings.readDelay.min`          | string   | `"30sec"`                           | Minimum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MIN`     |
-| `searchSettings.readDelay.max`          | string   | `"1min"`                            | Maximum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MAX`     |
+| `searchSettings.searchResultVisitTime`  | string   | `"10sec"`                           | Time to spend on each search result                                       | `CONFIG_SEARCH_VISIT_TIME`          |
+| `searchSettings.searchDelay.min`        | string   | `"30sec"`                           | Minimum delay between searches                                            | `CONFIG_SEARCH_DELAY_MIN`           |
+| `searchSettings.searchDelay.max`        | string   | `"1min"`                            | Maximum delay between searches                                            | `CONFIG_SEARCH_DELAY_MAX`           |
+| `searchSettings.readDelay.min`          | string   | `"30sec"`                           | Minimum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MIN`      |
+| `searchSettings.readDelay.max`          | string   | `"1min"`                            | Maximum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MAX`      |
 
 > [!NOTE]
 > \* Docker `CONFIG_*` array values are comma-separated strings e.g. `"error,warn"`. Regex patterns must be set directly in `config.json`.
@@ -259,24 +318,24 @@ Core sources:
 
 RSS feeds use a dotted path - `rss` for every feed, `rss.<site>` for a whole site, or `rss.<site>.<endpoint>` for a single feed:
 
-| Selector            | Feeds                                                            |
-| ------------------- | ---------------------------------------------------------------- |
-| `rss.googleTrends`  | Google Trends RSS (`gb`, `us`, `es`)                             |
+| Selector            | Feeds                                                             |
+| ------------------- | ----------------------------------------------------------------- |
+| `rss.googleTrends`  | Google Trends RSS (`gb`, `us`, `es`)                              |
 | `rss.googleNews`    | Google News (`gb`, `us`, `es`, `world`, `technology`, `business`) |
-| `rss.bbc`           | BBC News (`top`, `world`, `technology`, `business`, `science`)   |
-| `rss.guardian`      | The Guardian (`international`, `world`, `technology`)            |
-| `rss.theVerge`      | The Verge (`all`)                                                |
-| `rss.arsTechnica`   | Ars Technica (`all`)                                             |
-| `rss.reddit`        | Reddit listing feeds (`popular`, `worldnews`, `technology`)      |
-| `rss.elPais`        | El País (`portada`)                                              |
-| `rss.elMundo`       | El Mundo (`portada`)                                             |
-| `rss.rtve`          | RTVE noticias (`noticias`)                                       |
-| `rss.veinteMinutos` | 20minutos (`portada`)                                            |
-| `rss.marca`         | Marca - deportes (`portada`)                                     |
+| `rss.bbc`           | BBC News (`top`, `world`, `technology`, `business`, `science`)    |
+| `rss.guardian`      | The Guardian (`international`, `world`, `technology`)             |
+| `rss.theVerge`      | The Verge (`all`)                                                 |
+| `rss.arsTechnica`   | Ars Technica (`all`)                                              |
+| `rss.reddit`        | Reddit listing feeds (`popular`, `worldnews`, `technology`)       |
+| `rss.elPais`        | El País (`portada`)                                               |
+| `rss.elMundo`       | El Mundo (`portada`)                                              |
+| `rss.rtve`          | RTVE noticias (`noticias`)                                        |
+| `rss.veinteMinutos` | 20minutos (`portada`)                                             |
+| `rss.marca`         | Marca - deportes (`portada`)                                      |
 
 Add your own feeds in `src/constants/rssFeeds.ts`.
 
-Default:
+Default (Spanish current affairs first - swap the `rss.*` entries for `rss.bbc`, `rss.guardian.world` etc. for an English pool):
 
 ```json
 [
@@ -292,6 +351,13 @@ Default:
     "local"
 ]
 ```
+
+> [!NOTE]
+> `google` and `wikipedia` follow the account itself: Google Trends uses `ACCOUNT_N_GEO_LOCALE` and Wikipedia uses `ACCOUNT_N_LANG_CODE`. Setting those two per account is what makes the pool genuinely local, whichever feeds you pick.
+
+#### Cross-account query dedup
+
+With `searchSettings.crossAccountQueryDedup` enabled (the default), every query handed out is appended to a shared daily file at `<sessionPath>/search-history/YYYY-MM-DD.ndjson`, and each account loads that file before building its own pool. Accounts running the same day - including parallel clusters - therefore search different terms instead of repeating each other. Files older than 7 days are deleted automatically, and any filesystem error silently degrades to per-session dedup rather than failing the run. Turn the flag off to restore the previous per-account behaviour.
 
 ### Experimental
 
@@ -392,6 +458,16 @@ curl --request DELETE \
 
 See the [Control API session documentation](scripts/api/README.md#session-management)
 for response data, Axios examples, and error behavior.
+
+#### What lives under `sessionPath`
+
+| Path                                    | Contents                                                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `sessions.db`                           | Browser storage state and fingerprints per account (managed by `npm run clear-sessions`)                         |
+| `search-history/YYYY-MM-DD.ndjson`      | Queries already used today, shared across accounts - see [Cross-account query dedup](#cross-account-query-dedup) |
+| `link-offers-history/YYYY-MM-DD.ndjson` | Which "Keep earning" offers each account already visited today                                                   |
+
+Both history directories are self-pruning (7 days) and safe to delete: the worst consequence is that accounts may repeat a query or re-visit an already-claimed offer once.
 
 ---
 
