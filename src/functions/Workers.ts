@@ -3,6 +3,9 @@ import type { MicrosoftRewardsBot } from '../index'
 import type { DashboardData, PunchCard, BasePromotion } from '../interface/DashboardData'
 import type { AppDashboardData } from '../interface/AppDashBoardData'
 import type { QuestChild, ParentQuest } from '../browser/ReactFunc'
+import { reportOfferActivity } from './activities/api/ReportPromotion'
+
+const MAX_SWEEP_OFFERS = 10
 
 export class Workers {
     public bot: MicrosoftRewardsBot
@@ -71,6 +74,7 @@ export class Workers {
                 'MORE-PROMOTIONS',
                 'All "More Promotion" items have already been completed'
             )
+            await this.sweepEarnSnapshotOffers(data)
             return
         }
 
@@ -83,6 +87,85 @@ export class Workers {
         await this.solveActivities(activitiesUncompleted)
 
         this.bot.logger.info(this.bot.isMobile, 'MORE-PROMOTIONS', 'All "More Promotion" items have been completed')
+
+        await this.sweepEarnSnapshotOffers(data)
+    }
+
+    private async sweepEarnSnapshotOffers(data: DashboardData) {
+        try {
+            const refreshed = await this.bot.browser.func.refreshEarnSnapshot()
+            if (refreshed && (!this.bot.reactSnapshot || refreshed.offers.length >= this.bot.reactSnapshot.offers.length)) {
+                this.bot.reactSnapshot = refreshed
+            }
+
+            const knownIds = new Set<string>()
+            const todayKey = this.bot.utils.getFormattedDate()
+            for (const promo of data.dashboard.dailySetPromotions[todayKey] ?? []) knownIds.add(promo.offerId)
+            for (const promo of data.dashboard.morePromotions ?? []) knownIds.add(promo.offerId)
+            for (const promo of data.dashboard.morePromotionsWithoutPromotionalItems ?? []) knownIds.add(promo.offerId)
+            for (const card of data.dashboard.punchCards ?? []) {
+                for (const child of card.childPromotions ?? []) knownIds.add(child.offerId)
+            }
+
+            const candidates = (this.bot.reactSnapshot?.offers ?? [])
+                .filter(offer => {
+                    if (!offer.reportable || offer.isCompleted) return false
+                    if (knownIds.has(offer.offerId)) return false
+                    if (this.bot.config.skipNonPointTasks && offer.points <= 0) return false
+                    return true
+                })
+                .slice(0, MAX_SWEEP_OFFERS)
+
+            if (!candidates.length) {
+                this.bot.logger.debug(this.bot.isMobile, 'EARN-SWEEP', 'No uncovered reportable offers in the earn snapshot')
+                return
+            }
+
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'EARN-SWEEP',
+                `Found ${candidates.length} reportable offer(s) on /earn not covered by dashboard data | ${candidates
+                    .map(offer => `${offer.offerId}[points=${offer.points}]`)
+                    .join(', ')}`
+            )
+
+            for (const offer of candidates) {
+                try {
+                    const { status, acknowledged, gained, newBalance } = await reportOfferActivity(this.bot, offer, {
+                        offerId: offer.offerId
+                    })
+
+                    if (gained > 0) {
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'EARN-SWEEP',
+                            `Claimed "${offer.title}" | offerId=${offer.offerId} | pointsGained=${gained} | currentBalance=${newBalance}`,
+                            'green'
+                        )
+                    } else {
+                        this.bot.logger.warn(
+                            this.bot.isMobile,
+                            'EARN-SWEEP',
+                            `Offer not credited | offerId=${offer.offerId} | title="${offer.title}" | status=${status} | acknowledged=${acknowledged}`
+                        )
+                    }
+                } catch (error) {
+                    this.bot.logger.error(
+                        this.bot.isMobile,
+                        'EARN-SWEEP',
+                        `Error reporting offer | offerId=${offer.offerId} | message=${error instanceof Error ? error.message : String(error)}`
+                    )
+                }
+
+                await this.bot.utils.wait(this.bot.utils.randomDelay(5000, 15000))
+            }
+        } catch (error) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'EARN-SWEEP',
+                `Sweep failed | ${error instanceof Error ? error.message : String(error)}`
+            )
+        }
     }
 
     public async doAppPromotions(data: AppDashboardData) {
