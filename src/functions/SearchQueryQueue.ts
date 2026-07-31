@@ -99,8 +99,6 @@ export class SearchQueryQueue {
         const query = this.activeCluster.shift() ?? null
         if (!query) return null
 
-        this.ledger?.record(query)
-
         this.activeClusterIndex++
         this.bot.logger.debug(
             this.bot.isMobile,
@@ -108,6 +106,14 @@ export class SearchQueryQueue {
             `Dequeued query | main="${this.activeMainTopic}" | query=${this.activeClusterIndex}/${this.activeClusterSize} | remaining=${this.activeCluster.length} | value="${query}"`
         )
         return query
+    }
+
+    /**
+     * A query is only burned for other accounts once it actually produced a
+     * search; otherwise a failed attempt would waste it for everyone.
+     */
+    markSucceeded(query: string): void {
+        this.ledger?.record(query)
     }
 
     private async nextMainTopic(): Promise<string | null> {
