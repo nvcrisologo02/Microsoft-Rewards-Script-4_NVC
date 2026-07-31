@@ -105,7 +105,8 @@ export class Quiz extends Workers {
                         'QUIZ',
                         `Retrying quiz once with the refreshed session | offerId=${offerId}`
                     )
-                    await this.runQuiz(promotion, page, false)
+                    const freshPage = this.bot.isMobile ? this.bot.mainMobilePage : this.bot.mainDesktopPage
+                    await this.runQuiz(promotion, freshPage, false)
                     return
                 }
             }
