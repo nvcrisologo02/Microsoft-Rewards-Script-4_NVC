@@ -769,6 +769,7 @@ export class MicrosoftRewardsBot {
                             desktopSession = await this.createDesktopSession(account)
                             await this.punchcardManager.runDesktop()
                             if (doVisualSearch) await this.activities.doVisualSearch(data)
+                            if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
                         })
                         await closeDesktopSession()
                     }
@@ -808,6 +809,7 @@ export class MicrosoftRewardsBot {
                             desktopSession = await this.createDesktopSession(account)
                             await this.punchcardManager.runDesktop()
                             if (doVisualSearch) await this.activities.doVisualSearch(data)
+                            if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
                         })
 
                         const mobileWork = async (): Promise<[number, number]> => {
@@ -842,6 +844,7 @@ export class MicrosoftRewardsBot {
 
                                 await this.punchcardManager.runDesktop()
                                 if (doVisualSearch) await this.activities.doVisualSearch(data)
+                                if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
                                 if (doDesktopSearch && !apiSearch) {
                                     desktopPoints = await this.searchManager.searchDesktop(account)
                                 }

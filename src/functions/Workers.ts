@@ -91,7 +91,7 @@ export class Workers {
         await this.sweepEarnSnapshotOffers(data)
     }
 
-    private async sweepEarnSnapshotOffers(data: DashboardData) {
+    public async sweepEarnSnapshotOffers(data: DashboardData) {
         try {
             const refreshed = await this.bot.browser.func.refreshEarnSnapshot()
             if (refreshed && (!this.bot.reactSnapshot || refreshed.offers.length >= this.bot.reactSnapshot.offers.length)) {
