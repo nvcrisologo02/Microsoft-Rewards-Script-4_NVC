@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster from 'cluster'
+import path from 'path'
 import type { BrowserContext, Cookie, Page } from 'patchright'
 import pkg from '../package.json'
 
@@ -18,6 +19,7 @@ import { clearStorageState, closeSessionStore } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
 import { runScheduled } from './util/Scheduler'
 import { formatRunSummary, formatPointsBySource } from './util/RunSummary'
+import { EarningsHistory, ZERO_STREAK_ALERT_THRESHOLD } from './util/EarningsHistory'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -895,6 +897,23 @@ export class MicrosoftRewardsBot {
                     'FLOW',
                     `Points collected | pointsGained=${collectedPoints} | currentBalance=${finalPoints} | account=${accountEmail} | bySource=${formatPointsBySource(this.pointsBySource)}`
                 )
+
+                try {
+                    const earnings = new EarningsHistory(
+                        path.join(path.resolve(process.cwd(), this.config.sessionPath), 'earnings-history')
+                    )
+                    earnings.record(accountEmail, collectedPoints)
+                    const zeroStreak = earnings.zeroStreak(accountEmail)
+                    if (zeroStreak >= ZERO_STREAK_ALERT_THRESHOLD) {
+                        this.logger.warn(
+                            'main',
+                            'EARNINGS-ALERT',
+                            `${accountEmail} has earned no points for ${zeroStreak} consecutive runs - a claiming mechanism may have broken (check QUIZ / LINK-OFFERS / SEARCH log lines)`
+                        )
+                    }
+                } catch (error) {
+                    this.logger.debug('main', 'EARNINGS-ALERT', `Failed to update earnings history: ${error}`)
+                }
 
                 return {
                     initialPoints,
