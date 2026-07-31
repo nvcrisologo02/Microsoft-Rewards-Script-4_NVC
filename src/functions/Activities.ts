@@ -16,6 +16,7 @@ import { VisualSearch } from './activities/api/VisualSearch'
 // Browser
 import { Search as BrowserSearch } from './activities/browser/Search'
 import { SearchOnBing as BrowserSearchOnBing } from './activities/browser/SearchOnBing'
+import { Quiz } from './activities/Quiz'
 
 // Experimental
 import { Search as ApiSearch } from './activities/api/Search'
@@ -60,6 +61,11 @@ export default class Activities {
     doUrlReward = async (promotion: BasePromotion): Promise<void> => {
         const urlReward = new UrlReward(this.bot)
         await urlReward.doUrlReward(promotion)
+    }
+
+    doQuiz = async (promotion: BasePromotion, page: Page): Promise<void> => {
+        const quiz = new Quiz(this.bot)
+        await quiz.doQuiz(promotion, page)
     }
 
     doClaimBonusPoints = async (): Promise<void> => {

@@ -1023,6 +1023,83 @@ export default class BrowserFunc {
         return { ig, ...parsed, gained }
     }
 
+    /**
+     * Legacy bing quiz "ReportActivity" ajax endpoint (one call per question).
+     * Same shape as reportSearchActivity: the maintained bing cookie jar, an IG
+     * token scraped from a freshly served bing.com page and the ajax headers
+     * that endpoint family expects. Pass a previously returned `ig` to reuse it
+     * across the report loop instead of refetching the page every iteration.
+     */
+    async reportQuizActivity(
+        offerId: string,
+        opts?: { ig?: string | null; questionIndex?: number }
+    ): Promise<{ ig: string | null; status: number; data: unknown }> {
+        const jar = this.getBingJar()
+
+        const base = { ...(this.bot.fingerprint?.headers ?? {}) }
+        delete base['Cookie']
+        delete base['cookie']
+
+        const referer = `${URLs.bing.origin}/`
+        let ig = opts?.ig ?? null
+
+        if (!ig) {
+            const homeRes = await this.bot.http.request({
+                url: referer,
+                method: 'GET',
+                headers: {
+                    ...base,
+                    Cookie: this.jarToHeader(jar),
+                    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1'
+                }
+            })
+            this.mergeSetCookies(jar, homeRes.headers?.['set-cookie'] as string[] | string | undefined)
+
+            ig =
+                typeof homeRes.data === 'string'
+                    ? ((homeRes.data.match(/\bIG:"([A-F0-9]{32})"/i) ??
+                          homeRes.data.match(/[?&]IG=([A-F0-9]{32})\b/i))?.[1] ?? null)
+                    : null
+        }
+
+        // quizReport already carries ?ajaxreq=1
+        const reportUrl = ig ? `${URLs.bing.quizReport}&IG=${ig}&IID=SERP.5064` : URLs.bing.quizReport
+
+        const body = new URLSearchParams({
+            UserId: '',
+            timeZone: String(this.bot.userData.timezoneOffset ?? 0),
+            OfferId: offerId,
+            ActivityCount: '1',
+            QuestionIndex: String(opts?.questionIndex ?? -1)
+        })
+
+        const reportRes = await this.bot.http.request({
+            url: reportUrl,
+            method: 'POST',
+            headers: {
+                ...base,
+                Cookie: this.jarToHeader(jar),
+                Accept: '*/*',
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                Referer: referer,
+                Origin: URLs.bing.origin,
+                'Sec-Fetch-Dest': 'empty',
+                'Sec-Fetch-Mode': 'cors',
+                'Sec-Fetch-Site': 'same-origin',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            data: body.toString()
+        })
+        this.mergeSetCookies(jar, reportRes.headers?.['set-cookie'] as string[] | string | undefined)
+
+        return { ig, status: reportRes.status, data: reportRes.data }
+    }
+
     async reportVisualSearchActivity(visual: { bcid: string; query: string; serpUrl: string }): Promise<{
         ig: string | null
         balance: number | null

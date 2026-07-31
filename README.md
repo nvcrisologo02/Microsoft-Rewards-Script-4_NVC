@@ -215,27 +215,29 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 
 ### Activities
 
-| Setting                   | Type    | Default | Description                    | Docker environment variable      |
-| ------------------------- | ------- | ------- | ------------------------------ | -------------------------------- |
-| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities | `CONFIG_ACTIVITY_URL_REWARD`     |
-| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers  | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
+| Setting                   | Type    | Default | Description                                         | Docker environment variable      |
+| ------------------------- | ------- | ------- | --------------------------------------------------- | -------------------------------- |
+| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                      | `CONFIG_ACTIVITY_URL_REWARD`     |
+| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                       | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
+| `activities.quiz`         | boolean | `true`  | Solve quiz/puzzle activities (hybrid API + browser) | `CONFIG_ACTIVITY_QUIZ`           |
 
 ### Search Settings
 
-| Setting                                | Type     | Default                             | Description                                               | Docker environment variable        |
-| -------------------------------------- | -------- | ----------------------------------- | --------------------------------------------------------- | ---------------------------------- |
-| `searchSettings.scrollRandomResults`   | boolean  | `false`                             | Scroll randomly on results                                | `CONFIG_SEARCH_SCROLL_RANDOM`      |
-| `searchSettings.clickRandomResults`    | boolean  | `false`                             | Click random links                                        | `CONFIG_SEARCH_CLICK_RANDOM`       |
-| `searchSettings.runOnZeroPoints`       | boolean  | `false`                             | Run searches even when no search points remain            | `CONFIG_SEARCH_RUN_ON_ZERO_POINTS` |
-| `searchSettings.maxBonusSearches`      | number   | `110`                               | Max bonus searches per run (when `doBonusSearches` is on) | `CONFIG_SEARCH_MAX_BONUS_SEARCHES` |
-| `searchSettings.parallelSearching`     | boolean  | `true`                              | Run searches in parallel                                  | `CONFIG_SEARCH_PARALLEL`           |
-| `searchSettings.clusterSearch`         | boolean  | `true`                              | Cluster each main topic with Bing suggestions             | `CONFIG_SEARCH_CLUSTER`            |
-| `searchSettings.queryEngines`          | string[] | see [Query sources](#query-sources) | Sources used to build the search query pool               | `CONFIG_SEARCH_QUERY_ENGINES` \*   |
-| `searchSettings.searchResultVisitTime` | string   | `"10sec"`                           | Time to spend on each search result                       | `CONFIG_SEARCH_VISIT_TIME`         |
-| `searchSettings.searchDelay.min`       | string   | `"30sec"`                           | Minimum delay between searches                            | `CONFIG_SEARCH_DELAY_MIN`          |
-| `searchSettings.searchDelay.max`       | string   | `"1min"`                            | Maximum delay between searches                            | `CONFIG_SEARCH_DELAY_MAX`          |
-| `searchSettings.readDelay.min`         | string   | `"30sec"`                           | Minimum delay for reading                                 | `CONFIG_SEARCH_READ_DELAY_MIN`     |
-| `searchSettings.readDelay.max`         | string   | `"1min"`                            | Maximum delay for reading                                 | `CONFIG_SEARCH_READ_DELAY_MAX`     |
+| Setting                                 | Type     | Default                             | Description                                                               | Docker environment variable        |
+| --------------------------------------- | -------- | ----------------------------------- | ------------------------------------------------------------------------- | ---------------------------------- |
+| `searchSettings.scrollRandomResults`    | boolean  | `false`                             | Scroll randomly on results                                                | `CONFIG_SEARCH_SCROLL_RANDOM`      |
+| `searchSettings.clickRandomResults`     | boolean  | `false`                             | Click random links                                                        | `CONFIG_SEARCH_CLICK_RANDOM`       |
+| `searchSettings.runOnZeroPoints`        | boolean  | `false`                             | Run searches even when no search points remain                            | `CONFIG_SEARCH_RUN_ON_ZERO_POINTS` |
+| `searchSettings.maxBonusSearches`       | number   | `110`                               | Max bonus searches per run (when `doBonusSearches` is on)                 | `CONFIG_SEARCH_MAX_BONUS_SEARCHES` |
+| `searchSettings.parallelSearching`      | boolean  | `true`                              | Run searches in parallel                                                  | `CONFIG_SEARCH_PARALLEL`           |
+| `searchSettings.clusterSearch`          | boolean  | `true`                              | Cluster each main topic with Bing suggestions                             | `CONFIG_SEARCH_CLUSTER`            |
+| `searchSettings.queryEngines`           | string[] | see [Query sources](#query-sources) | Sources used to build the search query pool                               | `CONFIG_SEARCH_QUERY_ENGINES` \*   |
+| `searchSettings.crossAccountQueryDedup` | boolean  | `true`                              | Prevent the same search query being used by more than one account per day | `CONFIG_SEARCH_CROSS_ACCOUNT_DEDUP` |
+| `searchSettings.searchResultVisitTime`  | string   | `"10sec"`                           | Time to spend on each search result                                       | `CONFIG_SEARCH_VISIT_TIME`         |
+| `searchSettings.searchDelay.min`        | string   | `"30sec"`                           | Minimum delay between searches                                            | `CONFIG_SEARCH_DELAY_MIN`          |
+| `searchSettings.searchDelay.max`        | string   | `"1min"`                            | Maximum delay between searches                                            | `CONFIG_SEARCH_DELAY_MAX`          |
+| `searchSettings.readDelay.min`          | string   | `"30sec"`                           | Minimum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MIN`     |
+| `searchSettings.readDelay.max`          | string   | `"1min"`                            | Maximum delay for reading                                                 | `CONFIG_SEARCH_READ_DELAY_MAX`     |
 
 > [!NOTE]
 > \* Docker `CONFIG_*` array values are comma-separated strings e.g. `"error,warn"`. Regex patterns must be set directly in `config.json`.
@@ -257,15 +259,20 @@ Core sources:
 
 RSS feeds use a dotted path - `rss` for every feed, `rss.<site>` for a whole site, or `rss.<site>.<endpoint>` for a single feed:
 
-| Selector           | Feeds                                                          |
-| ------------------ | -------------------------------------------------------------- |
-| `rss.googleTrends` | Google Trends RSS (`gb`, `us`)                                 |
-| `rss.googleNews`   | Google News (`gb`, `us`, `world`, `technology`, `business`)    |
-| `rss.bbc`          | BBC News (`top`, `world`, `technology`, `business`, `science`) |
-| `rss.guardian`     | The Guardian (`international`, `world`, `technology`)          |
-| `rss.theVerge`     | The Verge (`all`)                                              |
-| `rss.arsTechnica`  | Ars Technica (`all`)                                           |
-| `rss.reddit`       | Reddit listing feeds (`popular`, `worldnews`, `technology`)    |
+| Selector            | Feeds                                                            |
+| ------------------- | ---------------------------------------------------------------- |
+| `rss.googleTrends`  | Google Trends RSS (`gb`, `us`, `es`)                             |
+| `rss.googleNews`    | Google News (`gb`, `us`, `es`, `world`, `technology`, `business`) |
+| `rss.bbc`           | BBC News (`top`, `world`, `technology`, `business`, `science`)   |
+| `rss.guardian`      | The Guardian (`international`, `world`, `technology`)            |
+| `rss.theVerge`      | The Verge (`all`)                                                |
+| `rss.arsTechnica`   | Ars Technica (`all`)                                             |
+| `rss.reddit`        | Reddit listing feeds (`popular`, `worldnews`, `technology`)      |
+| `rss.elPais`        | El País (`portada`)                                              |
+| `rss.elMundo`       | El Mundo (`portada`)                                             |
+| `rss.rtve`          | RTVE noticias (`noticias`)                                       |
+| `rss.veinteMinutos` | 20minutos (`portada`)                                            |
+| `rss.marca`         | Marca - deportes (`portada`)                                     |
 
 Add your own feeds in `src/constants/rssFeeds.ts`.
 
@@ -274,16 +281,15 @@ Default:
 ```json
 [
     "google",
+    "rss.googleTrends.es",
+    "rss.googleNews.es",
+    "rss.elPais",
+    "rss.rtve",
+    "rss.elMundo",
+    "rss.veinteMinutos",
+    "rss.marca",
     "wikipedia",
-    "wikirandom",
-    "hackernews",
-    "reddit",
-    "local",
-    "rss.googleTrends",
-    "rss.googleNews",
-    "rss.bbc",
-    "rss.guardian.world",
-    "rss.theVerge.all"
+    "local"
 ]
 ```
 
