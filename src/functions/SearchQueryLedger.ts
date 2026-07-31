@@ -53,11 +53,11 @@ export class SearchQueryLedger {
 
     cleanup(maxAgeDays = 7): void {
         try {
-            const cutoff = Date.now() - maxAgeDays * DAY_MS
+            const cutoffKey = dateKey(new Date(Date.now() - maxAgeDays * DAY_MS))
             for (const file of fs.readdirSync(this.baseDir)) {
                 if (!file.endsWith(FILE_EXT)) continue
-                const stamp = Date.parse(file.slice(0, -FILE_EXT.length))
-                if (!Number.isNaN(stamp) && stamp < cutoff) {
+                const key = file.slice(0, -FILE_EXT.length)
+                if (/^\d{4}-\d{2}-\d{2}$/.test(key) && key < cutoffKey) {
                     fs.rmSync(path.join(this.baseDir, file), { force: true })
                 }
             }

@@ -52,3 +52,16 @@ test('cleanup() on missing directory does not throw', () => {
     const ledger = new SearchQueryLedger(path.join(tmpDir(), 'missing'))
     assert.doesNotThrow(() => ledger.cleanup())
 })
+
+test('cleanup() keeps a file exactly at the maxAgeDays boundary', () => {
+    const dir = tmpDir()
+    const ledger = new SearchQueryLedger(dir)
+    const boundary = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const year = boundary.getFullYear()
+    const month = String(boundary.getMonth() + 1).padStart(2, '0')
+    const day = String(boundary.getDate()).padStart(2, '0')
+    const name = `${year}-${month}-${day}.ndjson`
+    fs.writeFileSync(path.join(dir, name), 'límite\n', 'utf-8')
+    ledger.cleanup(7)
+    assert.ok(fs.existsSync(path.join(dir, name)))
+})
