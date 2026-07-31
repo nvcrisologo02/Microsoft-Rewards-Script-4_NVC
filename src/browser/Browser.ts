@@ -21,6 +21,40 @@ interface BrowserCreationResult {
     fingerprint: BrowserFingerprintWithHeaders
 }
 
+/**
+ * A saved fingerprint predates any later locale change, so reusing it would
+ * advertise a different language than the browser context does - an
+ * inconsistency no real browser shows. Compare on the primary subtag only:
+ * es-419 still satisfies a request for es.
+ */
+export function fingerprintMatchesLocale(
+    fingerprint: BrowserFingerprintWithHeaders | null | undefined,
+    locale: string | undefined
+): boolean {
+    if (!locale) return true
+    if (!fingerprint) return false
+
+    const want = locale.split('-')[0]?.toLowerCase()
+    if (!want) return true
+
+    const navigator = fingerprint.fingerprint?.navigator as
+        | { language?: string; languages?: string[] }
+        | undefined
+    const languages = [navigator?.language, ...(navigator?.languages ?? [])].filter(
+        (value): value is string => typeof value === 'string' && value.length > 0
+    )
+    if (!languages.length) return false
+    if (!languages.some(value => value.split('-')[0]?.toLowerCase() === want)) return false
+
+    const headers = (fingerprint.headers ?? {}) as Record<string, string>
+    const acceptLanguage = headers['accept-language'] ?? headers['Accept-Language']
+    if (acceptLanguage && acceptLanguage.split(',')[0]?.split('-')[0]?.trim().toLowerCase() !== want) {
+        return false
+    }
+
+    return true
+}
+
 class Browser {
     private readonly bot: MicrosoftRewardsBot
     private static readonly BROWSER_ARGS = [
@@ -109,9 +143,20 @@ class Browser {
 
             const contextLocale = this.resolveAccountLocale(account)
 
-            const fingerprint =
-                (shouldUseFingerprint && session?.fingerprint) ||
-                (await this.generateFingerprint(this.bot.isMobile, contextLocale))
+            const savedFingerprint = shouldUseFingerprint ? session?.fingerprint : null
+            const savedFingerprintUsable = !!savedFingerprint && fingerprintMatchesLocale(savedFingerprint, contextLocale)
+
+            if (savedFingerprint && !savedFingerprintUsable) {
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'BROWSER',
+                    `Saved fingerprint predates the account locale (${contextLocale}) - regenerating so the context and fingerprint agree`
+                )
+            }
+
+            const fingerprint = savedFingerprintUsable
+                ? savedFingerprint
+                : await this.generateFingerprint(this.bot.isMobile, contextLocale)
 
             const screen = fingerprint.fingerprint.screen
 
