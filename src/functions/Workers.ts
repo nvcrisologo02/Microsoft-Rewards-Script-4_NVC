@@ -166,9 +166,12 @@ export class Workers {
 
             for (const offer of candidates) {
                 try {
-                    const { status, acknowledged, gained, newBalance } = await reportOfferActivity(this.bot, offer, {
-                        offerId: offer.offerId
-                    })
+                    const { status, acknowledged, gained, newBalance } = await reportOfferActivity(
+                        this.bot,
+                        offer,
+                        { offerId: offer.offerId },
+                        'earnSweep'
+                    )
 
                     if (gained > 0) {
                         this.bot.logger.info(
@@ -293,7 +296,10 @@ export class Workers {
             const settledBalance = await this.bot.browser.func.getCurrentPoints()
             const batchGained = settledBalance - startBalance
             if (batchGained > 0) {
-                this.bot.creditPoints('linkOffers', settledBalance - oldBalance, settledBalance)
+                // Keep the balance in sync even if the settle read came back lower than the
+                // last per-offer read: later activities seed their old balance from it
+                this.bot.userData.currentPoints = settledBalance
+                this.bot.creditPoints('linkOffers', settledBalance - oldBalance)
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'LINK-OFFERS',

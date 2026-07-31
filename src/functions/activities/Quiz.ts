@@ -56,7 +56,7 @@ export class Quiz extends Workers {
             }
 
             const oldBalance = this.bot.userData.currentPoints
-            const outcome = await reportOfferActivity(this.bot, live, promotion)
+            const outcome = await reportOfferActivity(this.bot, live, promotion, 'quiz')
             if (outcome.gained > 0) {
                 this.bot.logger.info(
                     this.bot.isMobile,
