@@ -1,11 +1,11 @@
-import { test } from 'node:test'
-import assert from 'node:assert'
+import test from 'node:test'
+import assert from 'node:assert/strict'
 import fs from 'fs'
 import path from 'path'
 import { validateConfig } from './Validator'
 
 function loadRawConfig(): Record<string, unknown> {
-    const file = path.join(__dirname, '../../config.json')
+    const file = path.join(__dirname, '../../config.example.json')
     return JSON.parse(fs.readFileSync(file, 'utf-8'))
 }
 

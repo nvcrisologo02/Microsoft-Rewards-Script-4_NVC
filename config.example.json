@@ -28,7 +28,8 @@
     },
     "activities": {
         "urlReward": true,
-        "searchOnBing": true
+        "searchOnBing": true,
+        "quiz": true
     },
     "searchOnBingLocalQueries": false,
     "globalTimeout": "30sec",
@@ -52,6 +53,7 @@
             "rss.guardian.world",
             "rss.theVerge.all"
         ],
+        "crossAccountQueryDedup": true,
         "searchResultVisitTime": "10sec",
         "searchDelay": {
             "min": "30sec",
