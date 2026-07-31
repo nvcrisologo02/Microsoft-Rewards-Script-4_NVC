@@ -8,6 +8,10 @@
     "ensureStreakProtection": true,
     "autoClaimPunchcardRewards": false,
     "skipNonPointTasks": true,
+    "accountDelay": {
+        "min": "1min",
+        "max": "3min"
+    },
     "workers": {
         "doDailySet": true,
         "doClaimBonusPoints": true,
@@ -34,6 +38,7 @@
         "runOnZeroPoints": false,
         "maxBonusSearches": 110,
         "parallelSearching": true,
+        "clusterSearch": true,
         "queryEngines": [
             "google",
             "wikipedia",

@@ -21,6 +21,41 @@ The API can:
 It uses only Node.js built-ins and follows the same ESM `.js` convention as the
 other scripts in the project.
 
+---
+
+## Table of Contents
+
+- [Architecture and persistence](#architecture-and-persistence)
+- [Requirements](#requirements)
+- [Quick Setup](#quick-setup)
+    - [Build the bot](#build-the-bot)
+    - [Run without authentication](#run-without-authentication)
+    - [Run with authentication from the command line](#run-with-authentication-from-the-command-line)
+    - [Run with authentication from `.env`](#run-with-authentication-from-env)
+    - [Connect a dashboard](#connect-a-dashboard)
+    - [Verify the API](#verify-the-api)
+- [Authentication](#authentication)
+- [HTTP conventions](#http-conventions)
+- [Axios setup](#axios-setup)
+- [Endpoint overview](#endpoint-overview)
+- [Reading API state](#reading-api-state)
+- [Session management](#session-management)
+- [Reading diagnostics](#reading-diagnostics)
+- [Starting and controlling runs](#starting-and-controlling-runs)
+- [Live event stream with SSE](#live-event-stream-with-sse)
+- [Reading and editing configuration](#reading-and-editing-configuration)
+- [Reading and editing the schedule](#reading-and-editing-the-schedule)
+- [Axios response and error handling](#axios-response-and-error-handling)
+- [PowerShell examples](#powershell-examples)
+- [HTTP status codes](#http-status-codes)
+- [Environment variables](#environment-variables)
+- [Security guidance](#security-guidance)
+- [Keeping the API running](#keeping-the-api-running)
+- [Startup readiness](#startup-readiness)
+- [File layout](#file-layout)
+
+---
+
 ## Architecture and persistence
 
 The API is designed as a lightweight runtime controller between the bot and a
@@ -73,12 +108,26 @@ when durable history is needed.
 The implementation is platform-independent. Process-tree termination uses
 `taskkill` on Windows and process-group signals on Linux and macOS.
 
-## Quick start
+## Quick Setup
 
-Build the bot once, then start the API:
+### Build the bot
+
+Install and build the project before starting the Control API:
 
 ```bash
+npm install
 npm run build
+```
+
+`npm run api` starts the API server, not an immediate rewards run. Use
+`POST /start` or a connected dashboard to start the bot after the API is
+listening.
+
+### Run without authentication
+
+Start the API without a token:
+
+```bash
 npm run api
 ```
 
@@ -88,30 +137,38 @@ The equivalent direct command is:
 node scripts/api/server.js
 ```
 
-The default address is:
+This starts an unauthenticated API at:
 
 ```text
 http://127.0.0.1:3010
 ```
 
-Test it locally:
+> [!IMPORTANT]
+> This is unauthenticated only when `API_TOKEN` is absent or empty in both the
+> current process environment and the loaded `.env` file. If `.env` already
+> contains `API_TOKEN`, remove or comment out that line and restart the API.
+
+> [!WARNING]
+> Run without authentication only while `API_HOST` is `127.0.0.1`, `localhost`,
+> or `::1` on a trusted machine. Never expose an unauthenticated API through a
+> LAN address, published container port, reverse proxy, or the public internet.
+
+### Run with authentication from the command line
+
+Pass a token through npm for a one-time authenticated launch:
 
 ```bash
-curl --request GET \
-  --url http://127.0.0.1:3010/health
+npm run api -- --token "YOUR_API_TOKEN"
 ```
 
-A successful response looks like:
+The first `--` belongs to npm. It tells npm to forward the remaining arguments
+to `scripts/api/server.js`. The API itself receives
+`--token "YOUR_API_TOKEN"`.
 
-```json
-{
-    "ok": true,
-    "name": "microsoft-rewards-script",
-    "version": "4.0.3",
-    "state": "idle",
-    "uptimeSec": 12,
-    "authRequired": false
-}
+The equivalent direct command is:
+
+```bash
+node scripts/api/server.js --token "YOUR_API_TOKEN"
 ```
 
 `persistence: { history: true }` (returned by `GET /`) means completed run
@@ -121,8 +178,16 @@ memory for the current process. This is unrelated to whether config/schedule
 writes or account-scoped session deletion are enabled - those are controlled
 by their own opt-in flags.
 
-The exact package name and version are read from the repository's
-`package.json`.
+> [!NOTE]
+> The supported option is `--token`, not `--auth`. If `API_TOKEN` is already set
+> in the environment or `.env`, that value takes precedence over the command-line
+> token.
+
+Generate a strong token instead of using a short example value:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ## Dashboard
 
@@ -147,10 +212,15 @@ the matching opt-in variables (`API_ALLOW_ACCOUNT_WRITE`, `API_ALLOW_CONFIG_WRIT
 
 ## Recommended `.env` setup
 
-The API automatically loads the first available `.env` from the current working
-directory, repository root, or `dist/` directory.
+You can also set the listen address and port for the same launch:
 
-For local dashboard use:
+```bash
+npm run api -- --host 127.0.0.1 --port 3010 --token "YOUR_API_TOKEN"
+```
+
+### Run with authentication from `.env`
+
+For normal or repeated use, configure authentication in the project `.env`:
 
 ```dotenv
 API_HOST=127.0.0.1
@@ -159,18 +229,61 @@ API_TOKEN=replace-with-a-long-random-token
 API_CORS_ORIGIN=http://127.0.0.1:3000
 ```
 
-Generate a strong token:
+Then start the API normally:
 
 ```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+npm run api
 ```
 
-Give the dashboard the same value, normally as:
+The API automatically loads the first available `.env` from the current working
+directory, repository root, or `dist/` directory. Authentication mode is chosen
+at startup, so restart the API after adding, changing, or removing `API_TOKEN`.
+
+### Connect a dashboard
+
+Give the dashboard the same base URL and token used by the API:
 
 ```dotenv
 CONTROL_API_URL=http://127.0.0.1:3010
 CONTROL_API_TOKEN=replace-with-the-same-token
 ```
+
+Leave `CONTROL_API_TOKEN` empty only when the API is intentionally running
+without authentication.
+
+### Verify the API
+
+For an unauthenticated server:
+
+```bash
+curl --request GET \
+  --url http://127.0.0.1:3010/health
+```
+
+For an authenticated server:
+
+```bash
+curl --request GET \
+  --url http://127.0.0.1:3010/health \
+  --header 'Authorization: Bearer YOUR_API_TOKEN'
+```
+
+A successful response looks like:
+
+```json
+{
+    "ok": true,
+    "name": "microsoft-rewards-script",
+    "version": "4.1.0",
+    "state": "idle",
+    "uptimeSec": 12,
+    "authRequired": true
+}
+```
+
+If authentication is enabled, the same request without a valid token returns
+`401 Unauthorized`. The exact package name and version are read from the
+repository's `package.json`.
 
 ## Authentication
 
@@ -179,6 +292,12 @@ the API is bound to a trusted loopback interface.
 
 When `API_TOKEN` is set, **every endpoint** requires the token, including `/`,
 `/health`, diagnostic files, and the SSE stream.
+
+The server token can be configured either persistently with `API_TOKEN` or for
+a one-time launch with `npm run api -- --token "YOUR_API_TOKEN"`. An environment
+or `.env` value takes precedence when both are present. The token is fixed for
+the lifetime of the API process; restart the server to change authentication
+mode or use a different token.
 
 The token can be supplied in one of three ways.
 
@@ -198,15 +317,16 @@ curl --request GET \
   --header 'X-API-Key: YOUR_API_TOKEN'
 ```
 
-### Query parameter
+### SSE query parameter
 
 ```text
 http://127.0.0.1:3010/events?token=<API_TOKEN>
 ```
 
-The query form is primarily intended for browser `EventSource`, which cannot
-set custom authorization headers. Prefer a header for normal HTTP requests,
-because URLs can be stored in browser history and proxy logs.
+The query form is accepted only by `/events` and is intended for browser
+`EventSource`, which cannot set custom authorization headers. Use a header for
+every other request because URLs can be stored in browser history and proxy
+logs.
 
 An invalid or missing token returns:
 
@@ -218,7 +338,7 @@ Content-Type: application/json
 ```json
 {
     "error": "Unauthorized",
-    "hint": "Provide the API token via Authorization: Bearer, X-API-Key, or ?token= ..."
+    "hint": "Provide the API token via Authorization: Bearer or X-API-Key. Browser EventSource may use ?token= only on /events. ..."
 }
 ```
 
@@ -339,7 +459,7 @@ console.log(data)
 ```json
 {
     "name": "microsoft-rewards-script",
-    "version": "4.0.3",
+    "version": "4.1.0",
     "message": "Control API",
     "authRequired": true,
     "persistence": { "history": true },
@@ -418,7 +538,7 @@ Representative response:
 ```jsonc
 {
     "name": "microsoft-rewards-script",
-    "version": "4.0.3",
+    "version": "4.1.0",
     "state": "running",
     "pid": 18420,
     "startedAt": "2026-07-14T09:30:00.000Z",
@@ -428,7 +548,7 @@ Representative response:
     "logBufferSize": 2000,
     "latestLogId": 418,
     "run": {
-        "version": "4.0.3",
+        "version": "4.1.0",
         "clusters": 1,
         "accountsTotal": 2,
         "accountsSeen": 1,
@@ -718,7 +838,7 @@ console.log(data.runs)
                 "signal": null,
                 "at": "2026-07-14T09:36:12.000Z"
             },
-            "version": "4.0.3",
+            "version": "4.1.0",
             "collected": 312,
             "accounts": [
                 {
@@ -747,7 +867,9 @@ In-memory history is reset when the API process restarts. For durable run histor
 
 ### `GET /accounts`
 
-Returns account slots discovered from `ACCOUNT_<N>_EMAIL` variables in `.env`.
+Returns every configured account slot discovered from `ACCOUNT_<N>_EMAIL`
+variables in `.env`, matching the bot's own loader. Missing slot numbers are
+allowed and results are returned in ascending slot order.
 Email addresses are returned in full for the local dashboard. Passwords,
 recovery addresses, TOTP secrets, and separate proxy username/password values
 are not returned; the configured proxy URL and port are included in the summary.
@@ -771,7 +893,7 @@ console.log(data.accounts)
 {
     "accounts": [
         {
-            "index": 2,
+            "index": 1,
             "email": "user@example.com",
             "geoLocale": "NL",
             "langCode": "nl",
@@ -1094,8 +1216,8 @@ console.log(data)
 
 Remaining accounts are densely remapped in the child environment. For example,
 if slots 1, 2, and 3 exist and slot 2 is excluded, original slots 1 and 3 become
-child slots 1 and 2. This prevents the bot from stopping account discovery at a
-missing middle slot.
+child slots 1 and 2. The original indexes are still used by the API request and
+response.
 
 Unknown slots and attempts to exclude every configured account return
 `400 Bad Request`.
@@ -1156,8 +1278,9 @@ const { data } = await api.post('/start', {
 console.log(data)
 ```
 
-Values are converted to strings and exist only in the child process. The
-following launch-hijacking keys are always discarded:
+String, number, and boolean values are converted to strings and exist only in
+the child process; `null` values are ignored. Arrays and objects are rejected.
+The following launch-hijacking keys are always discarded, case-insensitively:
 
 - `NODE_OPTIONS`;
 - `NODE_PATH`;
@@ -1528,7 +1651,7 @@ Successful response:
 {
     "ok": true,
     "path": "/app/config.json",
-    "via": "bot-validateConfig",
+    "via": "bot-ConfigSchema",
     "appliesOnNextRun": true
 }
 ```
@@ -1562,17 +1685,18 @@ const { data } = await api.put('/config', config)
 console.log(data)
 ```
 
-The API prefers the bot's compiled validator from
-`dist/util/Validator.js`. `API_VALIDATOR_MODULE` can point to another compiled
-module. If no bot validator is available, a limited structural fallback checks
-core field types.
+The API prefers the bot's strict compiled `ConfigSchema` from
+`dist/util/Validator.js`, then falls back to `validateConfig` when a custom
+validator module exposes only that function. `API_VALIDATOR_MODULE` can point
+to another compiled module. If no bot validator is available, a structural
+fallback checks the current core field types.
 
 Validation failures return `422 Unprocessable Entity`:
 
 ```jsonc
 {
     "error": "Config validation failed",
-    "via": "bot-validateConfig",
+    "via": "bot-ConfigSchema",
     "errors": ["workers.doMobileSearch: Expected boolean, received string"]
 }
 ```
@@ -1860,14 +1984,25 @@ The Docker entrypoint also uses `API_MODE=true` to run this API as the main
 container process. In that mode, scheduled and `RUN_ON_START` executions are
 routed through `POST /start`, so the API can observe and control them.
 
-CLI flags can override host, port, and token:
+The equivalent CLI flags are `--host`, `--port`, and `--token`:
 
 ```bash
 node scripts/api/server.js \
-  -host 0.0.0.0 \
-  -port 3010 \
-  -token "$API_TOKEN"
+  --host 0.0.0.0 \
+  --port 3010 \
+  --token "YOUR_API_TOKEN"
 ```
+
+Through npm, include npm's argument separator:
+
+```bash
+npm run api -- --host 0.0.0.0 --port 3010 --token "YOUR_API_TOKEN"
+```
+
+`API_HOST` and `API_TOKEN` take precedence over their CLI equivalents when they
+are already defined in the process environment or loaded `.env`. The `--port`
+flag takes precedence over `API_PORT`; invalid port values are rejected at
+startup.
 
 The API normally launches `dist/index.js` with the current Node executable. If
 that file is missing, it falls back to the local `ts-node` CLI and
@@ -1960,7 +2095,7 @@ After the HTTP server begins listening, it writes one machine-readable line to
 stdout:
 
 ```text
-__API_READY__ {"host":"127.0.0.1","port":3010,"pid":1234,"name":"microsoft-rewards-script","version":"4.0.3","auth":true}
+__API_READY__ {"host":"127.0.0.1","port":3010,"pid":1234,"name":"microsoft-rewards-script","version":"4.1.0","auth":true}
 ```
 
 A launcher can wait for this line rather than relying on a fixed startup delay.
