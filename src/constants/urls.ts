@@ -49,6 +49,7 @@ export const URLs = {
     },
     bing: {
         origin: BING,
+        quizReport: `${BING}/bingqa/ReportActivity?ajaxreq=1`,
         search: (query: string, cvid: string) =>
             `${BING}/search?q=${encodeURIComponent(query)}&PC=U531&FORM=ANNTA1&cvid=${cvid}`
     },
