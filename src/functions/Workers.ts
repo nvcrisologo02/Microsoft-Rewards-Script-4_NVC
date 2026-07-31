@@ -388,6 +388,29 @@ export class Workers {
                         break
                     }
 
+                    case 'quiz': {
+                        const basePromotion = activity as BasePromotion
+
+                        if (!this.bot.config.activities.quiz) {
+                            this.bot.logger.info(
+                                this.bot.isMobile,
+                                'ACTIVITY',
+                                `Skipping "Quiz" (disabled in config) | offerId=${offerId}`
+                            )
+                            continue
+                        }
+
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'ACTIVITY',
+                            `Found activity type "Quiz" | title="${activity.title}" | offerId=${offerId}`
+                        )
+
+                        const page = this.bot.isMobile ? this.bot.mainMobilePage : this.bot.mainDesktopPage
+                        await this.bot.activities.doQuiz(basePromotion, page)
+                        break
+                    }
+
                     default: {
                         this.bot.logger.warn(
                             this.bot.isMobile,
