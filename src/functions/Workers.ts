@@ -229,6 +229,7 @@ export class Workers {
             )
 
             let oldBalance = await this.bot.browser.func.getCurrentPoints()
+            const startBalance = oldBalance
 
             for (const url of urls) {
                 try {
@@ -252,7 +253,7 @@ export class Workers {
                         this.bot.logger.info(
                             this.bot.isMobile,
                             'LINK-OFFERS',
-                            `Link offer visit did not credit | url=${url}`
+                            `Link offer visited, credit not reflected yet (offers credit with delay) | url=${url}`
                         )
                     }
                 } catch (error) {
@@ -267,6 +268,27 @@ export class Workers {
             }
 
             await page.goto(URLs.bing.origin).catch(() => {})
+
+            // Bing daily offers credit asynchronously - settle, then report the batch outcome
+            await this.bot.utils.wait(this.bot.utils.randomDelay(20000, 30000))
+            const settledBalance = await this.bot.browser.func.getCurrentPoints()
+            const batchGained = settledBalance - startBalance
+            if (batchGained > 0) {
+                this.bot.userData.currentPoints = settledBalance
+                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + (settledBalance - oldBalance)
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'LINK-OFFERS',
+                    `Link offers batch complete | offersVisited=${urls.length} | pointsGained=${batchGained} | currentBalance=${settledBalance}`,
+                    'green'
+                )
+            } else {
+                this.bot.logger.warn(
+                    this.bot.isMobile,
+                    'LINK-OFFERS',
+                    `Link offers batch did not credit | offersVisited=${urls.length} | currentBalance=${settledBalance}`
+                )
+            }
         } catch (error) {
             this.bot.logger.warn(
                 this.bot.isMobile,
