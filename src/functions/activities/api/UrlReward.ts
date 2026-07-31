@@ -1,6 +1,6 @@
-import { URLs } from '../../../constants/urls'
 import type { BasePromotion } from '../../../interface/DashboardData'
 import { Workers } from '../../Workers'
+import { reportOfferActivity } from './ReportPromotion'
 
 export class UrlReward extends Workers {
     public async doUrlReward(promotion: BasePromotion) {
@@ -50,11 +50,6 @@ export class UrlReward extends Workers {
         const oldBalance = this.bot.userData.currentPoints
         const expectedPoints = live.points
 
-        const dashboardActivityType = Number(promotion.activityType)
-        const activityType =
-            live.activityType ??
-            (Number.isInteger(dashboardActivityType) && dashboardActivityType > 0 ? dashboardActivityType : 11)
-
         this.bot.logger.info(
             this.bot.isMobile,
             'URL-REWARD',
@@ -62,26 +57,7 @@ export class UrlReward extends Workers {
         )
 
         try {
-            const { status, acknowledged } = await this.bot.browser.func.reportServerAction(
-                actionId,
-                [
-                    live.hash,
-                    activityType,
-                    {
-                        offerid: offerId,
-                        isPromotional: live.isPromotional ? true : '$undefined',
-                        timezoneOffset: this.bot.userData.timezoneOffset
-                    }
-                ],
-                {
-                    url: URLs.rewards.dashboard,
-                    referer: URLs.rewards.dashboard,
-                    routerStateTree: this.bot.browser.react.routerStateTree('dashboard')
-                }
-            )
-
-            const newBalance = await this.bot.browser.func.getCurrentPoints()
-            const gainedPoints = newBalance - oldBalance
+            const { status, acknowledged, gained: gainedPoints, newBalance } = await reportOfferActivity(this.bot, live, promotion)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
@@ -90,9 +66,6 @@ export class UrlReward extends Workers {
             )
 
             if (gainedPoints > 0) {
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gainedPoints
-
                 const shortfall = expectedPoints > 0 && gainedPoints < expectedPoints
                 this.bot.logger.info(
                     this.bot.isMobile,
