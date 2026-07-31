@@ -283,10 +283,23 @@ export class Workers {
         )
         if (urls.length) return urls
 
-        // Section may only exist in the hydrated DOM - render /earn and scrape hrefs
+        // Section only exists in the hydrated DOM, below the fold and lazily rendered -
+        // render /earn, scroll through the page to trigger it, then scrape hrefs
         try {
             await page.goto(URLs.rewards.earn, { waitUntil: 'domcontentloaded', timeout: 30000 })
-            await this.bot.utils.wait(5000)
+            await this.bot.utils.wait(3000)
+
+            for (let step = 0; step < 8; step++) {
+                await page.evaluate(() => window.scrollBy(0, window.innerHeight)).catch(() => {})
+                await this.bot.utils.wait(800)
+                const found = await page
+                    .locator('a[href*="PROGRAMNAME="]')
+                    .count()
+                    .catch(() => 0)
+                if (found > 0) break
+            }
+            await page.waitForSelector('a[href*="PROGRAMNAME="]', { timeout: 10000 }).catch(() => {})
+
             const hrefs = await page.$$eval('a[href*="PROGRAMNAME="]', links =>
                 links.map(link => (link as HTMLAnchorElement).href)
             )
