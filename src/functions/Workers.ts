@@ -6,6 +6,7 @@ import type { DashboardData, PunchCard, BasePromotion } from '../interface/Dashb
 import type { AppDashboardData } from '../interface/AppDashBoardData'
 import type { QuestChild, ParentQuest } from '../browser/ReactFunc'
 import { reportOfferActivity } from './activities/api/ReportPromotion'
+import { SearchQueryLedger } from './SearchQueryLedger'
 
 const MAX_SWEEP_OFFERS = 10
 const MAX_LINK_OFFERS = 6
@@ -216,9 +217,27 @@ export class Workers {
         }
 
         try {
-            const urls = await this.collectLinkOfferUrls(page)
+            // Completed cards keep rendering without their rnoreward=1 marker for a while,
+            // so remember which offers each account already visited today
+            const path = await import('path')
+            const visitedLedger = new SearchQueryLedger(
+                path.join(path.resolve(process.cwd(), this.bot.config.sessionPath), 'link-offers-history')
+            )
+            visitedLedger.cleanup()
+            const visitedToday = visitedLedger.load()
+            const accountEmail = (this.bot.currentAccountEmail ?? '').toLowerCase()
+
+            const collected = await this.collectLinkOfferUrls(page)
+            const urls = collected.filter(url => !visitedToday.has(this.linkOfferVisitKey(accountEmail, url)))
+
             if (!urls.length) {
-                this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', 'No pending Bing link offers found on /earn')
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'LINK-OFFERS',
+                    collected.length
+                        ? `All ${collected.length} link offer(s) already visited today, skipping`
+                        : 'No pending Bing link offers found on /earn'
+                )
                 return
             }
 
@@ -234,6 +253,7 @@ export class Workers {
             for (const url of urls) {
                 try {
                     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+                    visitedLedger.record(this.linkOfferVisitKey(accountEmail, url))
                     await this.bot.utils.wait(this.bot.utils.randomDelay(8000, 12000))
 
                     const newBalance = await this.bot.browser.func.getCurrentPoints()
@@ -354,6 +374,11 @@ export class Workers {
             )
         }
         return urls
+    }
+
+    private linkOfferVisitKey(email: string, url: string): string {
+        const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
+        return `${email}|${form}`.toLowerCase()
     }
 
     private filterLinkOfferUrls(rawUrls: string[]): string[] {
