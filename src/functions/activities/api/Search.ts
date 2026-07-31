@@ -71,7 +71,7 @@ export class Search extends Workers {
 
                 if (gained > 0) {
                     totalGained += gained
-                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                    this.bot.creditPoints('search', gained)
                 }
 
                 if (searchProgress > 0) {

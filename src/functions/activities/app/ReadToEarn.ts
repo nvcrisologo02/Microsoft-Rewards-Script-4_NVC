@@ -91,8 +91,7 @@ export class ReadToEarn extends Workers {
                 }
 
                 // Update point tracking
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gainedPoints
+                this.bot.creditPoints('readToEarn', gainedPoints, newBalance)
                 totalGained += gainedPoints
                 articlesRead = i + 1
                 oldBalance = newBalance

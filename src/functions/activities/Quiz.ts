@@ -75,8 +75,7 @@ export class Quiz extends Workers {
                 const settledGain = settledBalance - oldBalance
 
                 if (settledGain > 0) {
-                    this.bot.userData.currentPoints = settledBalance
-                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + settledGain
+                    this.bot.creditPoints('quiz', settledGain, settledBalance)
                     this.bot.logger.info(
                         this.bot.isMobile,
                         'QUIZ',
@@ -177,8 +176,7 @@ export class Quiz extends Workers {
                 const gained = newBalance - oldBalance
                 if (gained <= 0) break
 
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                this.bot.creditPoints('quiz', gained, newBalance)
                 totalGained += gained
                 oldBalance = newBalance
 
@@ -253,8 +251,7 @@ export class Quiz extends Workers {
         const newBalance = await this.bot.browser.func.getCurrentPoints()
         const gained = newBalance - oldBalance
         if (gained > 0) {
-            this.bot.userData.currentPoints = newBalance
-            this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+            this.bot.creditPoints('quiz', gained, newBalance)
         }
         return gained
     }

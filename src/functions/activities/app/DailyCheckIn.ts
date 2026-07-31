@@ -45,8 +45,7 @@ export class DailyCheckIn extends Workers {
             )
 
             if (this.gainedPoints > 0) {
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + this.gainedPoints
+                this.bot.creditPoints('dailyCheckIn', this.gainedPoints, newBalance)
 
                 this.bot.logger.info(
                     this.bot.isMobile,

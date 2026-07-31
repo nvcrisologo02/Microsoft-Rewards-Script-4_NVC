@@ -76,8 +76,7 @@ export class BonusTracker implements SearchTracker {
         const newBalance = dash.userStatus.availablePoints
         const balanceGain = newBalance - this.balance
         if (balanceGain > 0) {
-            this.bot.userData.currentPoints = newBalance
-            this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + balanceGain
+            this.bot.creditPoints('bonusSearch', balanceGain, newBalance)
             this.balance = newBalance
         }
 

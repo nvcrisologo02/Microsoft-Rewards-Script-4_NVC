@@ -288,8 +288,8 @@ class PointsTracker implements SearchTracker {
         this.missing = updated
 
         if (gained > 0) {
-            this.bot.userData.currentPoints = Number(this.bot.userData.currentPoints ?? 0) + gained
-            this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+            const newBalance = Number(this.bot.userData.currentPoints ?? 0) + gained
+            this.bot.creditPoints('search', gained, newBalance)
         }
         return gained
     }

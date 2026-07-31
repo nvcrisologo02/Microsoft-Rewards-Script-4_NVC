@@ -260,8 +260,7 @@ export class Workers {
                     const gained = newBalance - oldBalance
 
                     if (gained > 0) {
-                        this.bot.userData.currentPoints = newBalance
-                        this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                        this.bot.creditPoints('linkOffers', gained, newBalance)
                         oldBalance = newBalance
                         this.bot.logger.info(
                             this.bot.isMobile,
@@ -294,8 +293,7 @@ export class Workers {
             const settledBalance = await this.bot.browser.func.getCurrentPoints()
             const batchGained = settledBalance - startBalance
             if (batchGained > 0) {
-                this.bot.userData.currentPoints = settledBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + (settledBalance - oldBalance)
+                this.bot.creditPoints('linkOffers', settledBalance - oldBalance, settledBalance)
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'LINK-OFFERS',
@@ -658,8 +656,7 @@ export class Workers {
             const newBalance = await this.bot.browser.func.getCurrentPoints()
             const gained = newBalance - oldBalance
             if (gained > 0) {
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                this.bot.creditPoints('punchcard', gained, newBalance)
             }
 
             this.bot.logger.info(

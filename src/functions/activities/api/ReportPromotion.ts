@@ -53,8 +53,7 @@ export async function reportOfferActivity(
     const newBalance = await bot.browser.func.getCurrentPoints()
     const gained = newBalance - oldBalance
     if (gained > 0) {
-        bot.userData.currentPoints = newBalance
-        bot.userData.gainedPoints = (bot.userData.gainedPoints ?? 0) + gained
+        bot.creditPoints('activity', gained, newBalance)
     }
 
     return { status, acknowledged, gained, newBalance }

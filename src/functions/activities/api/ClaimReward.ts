@@ -65,8 +65,7 @@ export class ClaimReward extends Workers {
 
             if (acknowledged) {
                 if (gained > 0) {
-                    this.bot.userData.currentPoints = newBalance
-                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                    this.bot.creditPoints('punchcard', gained, newBalance)
                 }
 
                 this.bot.logger.info(

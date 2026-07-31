@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { formatRunSummary, AccountSummary } from './RunSummary'
+import { formatRunSummary, formatPointsBySource, AccountSummary } from './RunSummary'
 
 const rows: AccountSummary[] = [
     { email: 'pupela_32@outlook.com', collectedPoints: 285, finalPoints: 26831, durationSeconds: 252, success: true },
@@ -71,4 +71,13 @@ test('rows vacío no lanza y produce cabecera + TOTAL', () => {
     assert.ok(out.includes('(0 cuentas)'), 'cabecera con 0')
     assert.ok(out.includes('TOTAL'), 'fila TOTAL presente')
     assert.ok(out.includes('0/0 OK'), 'recuento 0/0')
+})
+
+test('formatPointsBySource ordena por puntos y omite ceros', () => {
+    assert.equal(formatPointsBySource({ quiz: 20, search: 120, earnSweep: 0 }), 'search 120 | quiz 20')
+})
+
+test('formatPointsBySource devuelve none cuando no hay puntos', () => {
+    assert.equal(formatPointsBySource({}), 'none')
+    assert.equal(formatPointsBySource({ quiz: 0 }), 'none')
 })
