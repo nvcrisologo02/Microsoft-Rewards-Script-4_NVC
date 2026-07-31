@@ -187,7 +187,7 @@ _find_default_drift() {
   new_paths=$(jq -r "$leaf_expr" "$CONFIG_EXAMPLE" 2>/dev/null) || return 0
   # Only paths present in both snapshots are "changed defaults" - a path
   # that's new in the example is a missing-key case, already covered above.
-  common_paths=$(comm -12 <(echo "$old_paths") <(echo "$new_paths"))
+  common_paths=$(comm -12 <(echo "$old_paths") <(echo "$new_paths")) || return 0
 
   local path old_val new_val user_val report=""
   while IFS= read -r path; do
