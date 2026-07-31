@@ -638,11 +638,12 @@ export class Login {
                 `Context ready | actions=${actionsCount} | reportable=${reportableCount} | available=${availablePoints}`
             )
         } catch (error) {
-            throw this.bot.logger.error(
+            this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-REWARD-SESSION',
                 `Failed to acquire rewards context: ${error instanceof Error ? error.message : String(error)}`
             )
+            throw error
         }
     }
 

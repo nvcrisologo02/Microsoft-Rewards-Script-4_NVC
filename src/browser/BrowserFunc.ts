@@ -9,6 +9,7 @@ import type { MicrosoftRewardsBot } from '../index'
 import type { PageSnapshot, ParsedOffer } from './ReactFunc'
 import { clearStorageState, loadSession, saveStorageState } from '../util/SessionStore'
 import { isBrowserClosedError } from '../util/Utils'
+import { retryOnNavigation } from '../util/PageStability'
 
 import type { Counters, DashboardData } from './../interface/DashboardData'
 import type { AppUserData } from '../interface/AppUserData'
@@ -71,11 +72,12 @@ export default class BrowserFunc {
             if (response.data) return response.data
             throw new Error('Dashboard data missing from API response')
         } catch (error) {
-            throw this.bot.logger.error(
+            this.bot.logger.error(
                 this.bot.isMobile,
                 'GET-DASHBOARD-DATA',
                 `Failed to get dashboard data: ${error instanceof Error ? error.message : String(error)}`
             )
+            throw error
         }
     }
 
@@ -255,7 +257,9 @@ export default class BrowserFunc {
             // /earn is the offers page
             await page.goto(URLs.rewards.earn, { waitUntil: 'domcontentloaded' })
 
-            const earnDom = await page.content()
+            // The rewards SPA keeps navigating after domcontentloaded; retry the
+            // DOM read instead of dying on Playwright's navigation race.
+            const earnDom = await retryOnNavigation(() => page.content())
             const earnRaw = await this.fetchBootstrapHtml(page, URLs.rewards.earn, '/earn')
 
             this.rewardsDeploymentId = this.bot.browser.react.buildId(earnRaw || earnDom) ?? ''
