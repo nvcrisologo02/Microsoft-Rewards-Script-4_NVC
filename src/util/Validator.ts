@@ -107,9 +107,10 @@ export const ConfigSchema = z.object({
         .object({
             urlReward: z.boolean().default(true),
             searchOnBing: z.boolean().default(true),
-            quiz: z.boolean().default(true)
+            quiz: z.boolean().default(true),
+            linkOffers: z.boolean().default(true)
         })
-        .default({ urlReward: true, searchOnBing: true, quiz: true }),
+        .default({ urlReward: true, searchOnBing: true, quiz: true, linkOffers: true }),
     searchOnBingLocalQueries: z.boolean(),
     globalTimeout: NumberOrString,
     searchSettings: z.object({
@@ -188,7 +189,8 @@ const defaultConfig: Config = {
     activities: {
         urlReward: true,
         searchOnBing: true,
-        quiz: true
+        quiz: true,
+        linkOffers: true
     },
     searchOnBingLocalQueries: false,
     globalTimeout: '30sec',

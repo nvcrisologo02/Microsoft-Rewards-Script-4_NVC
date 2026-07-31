@@ -222,7 +222,7 @@ During the desktop pass the script renders `/earn`, scrolls until the lazily-ren
 - **Locale matters.** These cards are market-gated - see the warning in [Account Setup](#account-setup). With a mismatched locale the section renders without them and the log reads `No pending Bing link offers found on /earn`.
 - Completed offers are filtered two ways: the `rnoreward=1` marker Rewards adds to the href, and a per-account daily ledger at `<sessionPath>/link-offers-history/YYYY-MM-DD.ndjson` (so a second run the same day logs `already visited today, skipping`).
 - Credits arrive asynchronously, so the per-offer line often says "credit not reflected yet" and the real outcome is the `Link offers batch complete` summary logged after a settle delay.
-- Gated by `activities.quiz`.
+- Gated by `activities.linkOffers`.
 
 ### Earn snapshot sweep
 
@@ -274,11 +274,12 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 
 ### Activities
 
-| Setting                   | Type    | Default | Description                                                                                                              | Docker environment variable      |
-| ------------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------- |
-| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                                                                                           | `CONFIG_ACTIVITY_URL_REWARD`     |
-| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                                                                            | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
-| `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles) and claim ["Keep earning" daily offers](#keep-earning-daily-offers) | `CONFIG_ACTIVITY_QUIZ`           |
+| Setting                   | Type    | Default | Description                                                                | Docker environment variable      |
+| ------------------------- | ------- | ------- | --------------------------------------------------------------------------- | -------------------------------- |
+| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                                              | `CONFIG_ACTIVITY_URL_REWARD`     |
+| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                               | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
+| `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles)                        | `CONFIG_ACTIVITY_QUIZ`           |
+| `activities.linkOffers`   | boolean | `true`  | Claim ["Keep earning" daily offers](#keep-earning-daily-offers)             | `CONFIG_ACTIVITY_LINK_OFFERS`    |
 
 ### Search Settings
 

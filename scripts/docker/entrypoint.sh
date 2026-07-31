@@ -112,6 +112,7 @@ fi
 #      CONFIG_ACTIVITY_URL_REWARD        → .activities.urlReward
 #      CONFIG_ACTIVITY_SEARCH_ON_BING    → .activities.searchOnBing
 #      CONFIG_ACTIVITY_QUIZ              → .activities.quiz
+#      CONFIG_ACTIVITY_LINK_OFFERS       → .activities.linkOffers
 #
 #    Experimental:
 #      CONFIG_EXPERIMENTAL_API_SEARCH         → .experimental.apiSearch
@@ -318,6 +319,7 @@ _cfg "${CONFIG_SEARCH_ON_BING_LOCAL:-}"    '.searchOnBingLocalQueries'          
 _cfg "${CONFIG_ACTIVITY_URL_REWARD:-}"     '.activities.urlReward'                  bool
 _cfg "${CONFIG_ACTIVITY_SEARCH_ON_BING:-}" '.activities.searchOnBing'               bool
 _cfg "${CONFIG_ACTIVITY_QUIZ:-}"           '.activities.quiz'                       bool
+_cfg "${CONFIG_ACTIVITY_LINK_OFFERS:-}"    '.activities.linkOffers'                 bool
 
 # Experimental
 _cfg "${CONFIG_EXPERIMENTAL_API_SEARCH:-}"         '.experimental.apiSearch'         bool

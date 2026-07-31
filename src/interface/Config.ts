@@ -75,6 +75,7 @@ export interface ConfigActivities {
     urlReward: boolean
     searchOnBing: boolean
     quiz: boolean
+    linkOffers: boolean
 }
 
 // Webhooks

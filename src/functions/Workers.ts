@@ -215,8 +215,12 @@ export class Workers {
 
     public async doBingLinkOffers() {
         if (this.bot.isMobile) return
-        if (!this.bot.config.activities.quiz) {
-            this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', 'Skipping Bing link offers (activities.quiz=false)')
+        if (!this.bot.config.activities.linkOffers) {
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                'Skipping Bing link offers (activities.linkOffers=false)'
+            )
             return
         }
 
@@ -237,7 +241,23 @@ export class Workers {
             const visitedToday = visitedLedger.load()
             const accountEmail = (this.bot.currentAccountEmail ?? '').toLowerCase()
 
+            const discovered = [...visitedToday].filter(key => key.startsWith('discovered|'))
+            if (discovered.length) {
+                const pendingKnown = discovered.filter(
+                    key => !visitedToday.has(`${accountEmail}|${key.slice('discovered|'.length)}`)
+                )
+                if (!pendingKnown.length) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'LINK-OFFERS',
+                        `All ${discovered.length} link offer(s) discovered today were already visited by this account, skipping the /earn render`
+                    )
+                    return
+                }
+            }
+
             const collected = await this.collectLinkOfferUrls(page)
+            for (const url of collected) visitedLedger.record(this.linkOfferDiscoveryKey(url))
             const urls = collected.filter(url => !visitedToday.has(this.linkOfferVisitKey(accountEmail, url)))
 
             if (!urls.length) {
@@ -390,6 +410,11 @@ export class Workers {
     private linkOfferVisitKey(email: string, url: string): string {
         const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
         return `${email}|${form}`.toLowerCase()
+    }
+
+    private linkOfferDiscoveryKey(url: string): string {
+        const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
+        return `discovered|${form}`.toLowerCase()
     }
 
     private filterLinkOfferUrls(rawUrls: string[]): string[] {
