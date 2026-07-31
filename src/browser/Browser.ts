@@ -107,8 +107,11 @@ class Browser {
                 ? account.saveFingerprint.mobile
                 : account.saveFingerprint.desktop
 
+            const contextLocale = this.resolveAccountLocale(account)
+
             const fingerprint =
-                (shouldUseFingerprint && session?.fingerprint) || (await this.generateFingerprint(this.bot.isMobile))
+                (shouldUseFingerprint && session?.fingerprint) ||
+                (await this.generateFingerprint(this.bot.isMobile, contextLocale))
 
             const screen = fingerprint.fingerprint.screen
 
@@ -118,6 +121,9 @@ class Browser {
                 newContextOptions: {
                     permissions: [],
                     ignoreHTTPSErrors: hasProxy,
+                    // Market-sensitive offers (e.g. "Keep earning" daily quizzes) are only served
+                    // when the browser context matches the account's language/market
+                    ...(contextLocale ? { locale: contextLocale } : {}),
                     // Restore cookies
                     ...(session?.storageState ? { storageState: session.storageState } : {}),
                     ...(this.bot.isMobile
@@ -203,18 +209,27 @@ class Browser {
         }
     }
 
-    async generateFingerprint(isMobile: boolean): Promise<BrowserFingerprintWithHeaders> {
+    async generateFingerprint(isMobile: boolean, locale?: string): Promise<BrowserFingerprintWithHeaders> {
         const hostOs: 'windows' | 'macos' | 'linux' =
             process.platform === 'darwin' ? 'macos' : process.platform === 'linux' ? 'linux' : 'windows'
 
         const fingerPrintData = new FingerprintGenerator().getFingerprint({
             devices: isMobile ? ['mobile'] : ['desktop'],
             operatingSystems: isMobile ? ['android'] : [hostOs],
-            browsers: [{ name: 'edge' }]
+            browsers: [{ name: 'edge' }],
+            ...(locale ? { locales: [locale] } : {})
         })
 
         const userAgentManager = new UserAgentManager(this.bot)
         return await userAgentManager.updateFingerprintUserAgent(fingerPrintData, isMobile)
+    }
+
+    private resolveAccountLocale(account: Account): string | undefined {
+        const langCode = (account.langCode || '').trim().toLowerCase()
+        if (!langCode || langCode === 'en') return undefined
+
+        const geo = (account.geoLocale || '').trim().toUpperCase()
+        return geo && geo !== 'AUTO' ? `${langCode}-${geo}` : langCode
     }
 }
 
