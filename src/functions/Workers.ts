@@ -290,6 +290,7 @@ export class Workers {
             await this.bot.utils.wait(3000)
 
             for (let step = 0; step < 8; step++) {
+                await page.mouse.wheel(0, 1200).catch(() => {})
                 await page.evaluate(() => window.scrollBy(0, window.innerHeight)).catch(() => {})
                 await this.bot.utils.wait(800)
                 const found = await page
@@ -304,11 +305,25 @@ export class Workers {
                 links.map(link => (link as HTMLAnchorElement).href)
             )
             urls = this.filterLinkOfferUrls(hrefs)
-            this.bot.logger.debug(
+
+            const totalAnchors = await page
+                .locator('a')
+                .count()
+                .catch(() => -1)
+            this.bot.logger.info(
                 this.bot.isMobile,
                 'LINK-OFFERS',
-                `DOM scrape | anchors=${hrefs.length} | pending=${urls.length}`
+                `DOM scrape | url=${page.url()} | totalAnchors=${totalAnchors} | programAnchors=${hrefs.length} | pending=${urls.length}`
             )
+            if (!urls.length) {
+                const path = await import('path')
+                const shotPath = path.join(
+                    path.resolve(process.cwd(), this.bot.config.sessionPath),
+                    'link-offers-debug.png'
+                )
+                await page.screenshot({ path: shotPath, fullPage: true }).catch(() => {})
+                this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', `Debug screenshot saved | ${shotPath}`)
+            }
         } catch (error) {
             this.bot.logger.debug(
                 this.bot.isMobile,
