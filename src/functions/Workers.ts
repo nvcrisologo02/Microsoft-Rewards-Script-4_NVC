@@ -207,7 +207,21 @@ export class Workers {
         }
 
         if (!questChildren.length) {
-            this.bot.logger.info(this.bot.isMobile, 'PUNCHCARD', `No actionable children rendered for "${title}"`)
+            const apiChildren = (apiCard?.childPromotions ?? []).filter(c => c.offerId && !c.complete)
+            if (!apiChildren.length) {
+                this.bot.logger.info(this.bot.isMobile, 'PUNCHCARD', `No actionable children rendered for "${title}"`)
+                return
+            }
+
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'PUNCHCARD',
+                `No children rendered for "${title}" - falling back to ${apiChildren.length} API child promotion(s) | ${apiChildren
+                    .map(c => `${c.offerId}[type=${c.promotionType} points=${c.pointProgressMax} promo=${c.attributes?.promotional ?? '-'}]`)
+                    .join(', ')}`
+            )
+
+            await this.solveActivities(apiChildren)
             return
         }
 
