@@ -131,17 +131,6 @@ export class Workers {
                 `Sweep summary | snapshotOffers=${offers.length} | reportable=${reportableOffers.length} | candidates=${candidates.length} | skippedKnown=${skippedKnown} | skippedZeroPoints=${skippedZeroPoints}`
             )
 
-            this.bot.logger.info(
-                this.bot.isMobile,
-                'EARN-SWEEP',
-                `Snapshot inventory | ${offers
-                    .map(
-                        offer =>
-                            `${offer.offerId}[pts=${offer.points} rep=${offer.reportable ? 1 : 0} hash=${offer.hash ? 1 : 0} done=${offer.isCompleted ? 1 : 0} lock=${offer.isLocked ? 1 : 0} dest=${(offer.destination ?? '').slice(0, 60)}]`
-                    )
-                    .join(' | ')}`
-            )
-
             if (!candidates.length) {
                 if (reportableOffers.length) {
                     this.bot.logger.info(
