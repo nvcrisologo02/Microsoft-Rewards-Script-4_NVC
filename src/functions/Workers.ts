@@ -53,6 +53,19 @@ export class Workers {
             }) ?? []
 
         if (!activitiesUncompleted.length) {
+            const excluded = morePromotions.filter(x => !x.complete && x.pointProgressMax > 0)
+            if (excluded.length) {
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'MORE-PROMOTIONS',
+                    `No actionable items, but ${excluded.length} incomplete point-carrying item(s) were excluded by filters | ${excluded
+                        .map(
+                            x =>
+                                `${x.offerId}[type=${x.promotionType} points=${x.pointProgressMax} promo=${x.attributes?.promotional ?? '-'} prio=${x.priority} lock=${x.exclusiveLockedFeatureStatus ?? '-'}]`
+                        )
+                        .join(', ')}`
+                )
+            }
             this.bot.logger.info(
                 this.bot.isMobile,
                 'MORE-PROMOTIONS',
@@ -209,7 +222,12 @@ export class Workers {
         if (!questChildren.length) {
             const apiChildren = (apiCard?.childPromotions ?? []).filter(c => c.offerId && !c.complete)
             if (!apiChildren.length) {
-                this.bot.logger.info(this.bot.isMobile, 'PUNCHCARD', `No actionable children rendered for "${title}"`)
+                const raw = apiCard?.childPromotions ?? []
+                this.bot.logger.info(
+                    this.bot.isMobile,
+                    'PUNCHCARD',
+                    `No actionable children rendered for "${title}" | apiCard=${apiCard ? 'yes' : 'no'} | apiChildren=${raw.length} (complete=${raw.filter(c => c.complete).length})`
+                )
                 return
             }
 
