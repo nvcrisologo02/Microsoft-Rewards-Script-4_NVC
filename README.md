@@ -232,6 +232,15 @@ Some offers appear in the `/earn` React snapshot with a live hash but never show
 
 Quests are solved from their own quest page. When a quest page renders no actionable children but the API punchcard data still carries incomplete children (as "Keep earning" does), those children are dispatched through the normal activity dispatcher instead of being dropped. Log tag: `PUNCHCARD`. Reward claiming is gated by `autoClaimPunchcardRewards`.
 
+### Reading the run for problems
+
+Two log tags help spot when Rewards changes something under you:
+
+- `ACTIVITY-GAPS` — one line per account listing activity types this build cannot claim. It is a warning (and reaches your webhooks) only when the skipped items carry points, which is the signal that a new claimable surface has appeared and needs support.
+- `EARNINGS-ALERT` — a warning when an account earns nothing for three consecutive runs, i.e. a claiming mechanism has probably broken. History lives per account under `<sessionPath>/earnings-history/`.
+
+The per-account "Points collected" line also carries a `bySource=` breakdown (e.g. `search 120 | quiz 20 | linkOffers 30`) so you can see at a glance which mechanism produced the points - and which stopped.
+
 ## Configuration Options
 
 Edit `config.json` to customize behavior, or set `CONFIG_*` environment variables in `compose.yaml` (Docker). Below are all currently available options.
@@ -274,12 +283,12 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 
 ### Activities
 
-| Setting                   | Type    | Default | Description                                                                | Docker environment variable      |
-| ------------------------- | ------- | ------- | --------------------------------------------------------------------------- | -------------------------------- |
-| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                                              | `CONFIG_ACTIVITY_URL_REWARD`     |
-| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                               | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
-| `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles)                        | `CONFIG_ACTIVITY_QUIZ`           |
-| `activities.linkOffers`   | boolean | `true`  | Claim ["Keep earning" daily offers](#keep-earning-daily-offers)             | `CONFIG_ACTIVITY_LINK_OFFERS`    |
+| Setting                   | Type    | Default | Description                                                     | Docker environment variable      |
+| ------------------------- | ------- | ------- | --------------------------------------------------------------- | -------------------------------- |
+| `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                                  | `CONFIG_ACTIVITY_URL_REWARD`     |
+| `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                   | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
+| `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles)            | `CONFIG_ACTIVITY_QUIZ`           |
+| `activities.linkOffers`   | boolean | `true`  | Claim ["Keep earning" daily offers](#keep-earning-daily-offers) | `CONFIG_ACTIVITY_LINK_OFFERS`    |
 
 ### Search Settings
 
@@ -467,6 +476,7 @@ for response data, Axios examples, and error behavior.
 | `sessions.db`                           | Browser storage state and fingerprints per account (managed by `npm run clear-sessions`)                         |
 | `search-history/YYYY-MM-DD.ndjson`      | Queries already used today, shared across accounts - see [Cross-account query dedup](#cross-account-query-dedup) |
 | `link-offers-history/YYYY-MM-DD.ndjson` | Which "Keep earning" offers each account already visited today                                                   |
+| `earnings-history/<account>.ndjson`     | Points earned per run per account, used for the `EARNINGS-ALERT` zero-streak warning                             |
 
 Both history directories are self-pruning (7 days) and safe to delete: the worst consequence is that accounts may repeat a query or re-visit an already-claimed offer once.
 
