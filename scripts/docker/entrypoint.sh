@@ -105,11 +105,13 @@ fi
 #      CONFIG_SEARCH_RUN_ON_ZERO_POINTS  → .searchSettings.runOnZeroPoints
 #      CONFIG_SEARCH_MAX_BONUS_SEARCHES  → .searchSettings.maxBonusSearches
 #      CONFIG_SEARCH_QUERY_ENGINES       → .searchSettings.queryEngines (comma-separated)
+#      CONFIG_SEARCH_CROSS_ACCOUNT_DEDUP → .searchSettings.crossAccountQueryDedup
 #      CONFIG_SEARCH_ON_BING_LOCAL       → .searchOnBingLocalQueries
 #
 #    Activities:
 #      CONFIG_ACTIVITY_URL_REWARD        → .activities.urlReward
 #      CONFIG_ACTIVITY_SEARCH_ON_BING    → .activities.searchOnBing
+#      CONFIG_ACTIVITY_QUIZ              → .activities.quiz
 #
 #    Experimental:
 #      CONFIG_EXPERIMENTAL_API_SEARCH         → .experimental.apiSearch
@@ -309,11 +311,13 @@ _cfg "${CONFIG_SEARCH_VISIT_TIME:-}"       '.searchSettings.searchResultVisitTim
 _cfg "${CONFIG_SEARCH_RUN_ON_ZERO_POINTS:-}" '.searchSettings.runOnZeroPoints'      bool
 _cfg "${CONFIG_SEARCH_MAX_BONUS_SEARCHES:-}" '.searchSettings.maxBonusSearches'     number
 _cfg_array "${CONFIG_SEARCH_QUERY_ENGINES-__UNSET__}" '.searchSettings.queryEngines'
+_cfg "${CONFIG_SEARCH_CROSS_ACCOUNT_DEDUP:-}" '.searchSettings.crossAccountQueryDedup' bool
 _cfg "${CONFIG_SEARCH_ON_BING_LOCAL:-}"    '.searchOnBingLocalQueries'              bool
 
 # Activities
 _cfg "${CONFIG_ACTIVITY_URL_REWARD:-}"     '.activities.urlReward'                  bool
 _cfg "${CONFIG_ACTIVITY_SEARCH_ON_BING:-}" '.activities.searchOnBing'               bool
+_cfg "${CONFIG_ACTIVITY_QUIZ:-}"           '.activities.quiz'                       bool
 
 # Experimental
 _cfg "${CONFIG_EXPERIMENTAL_API_SEARCH:-}"         '.experimental.apiSearch'         bool

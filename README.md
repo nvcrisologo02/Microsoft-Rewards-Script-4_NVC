@@ -219,7 +219,7 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 | ------------------------- | ------- | ------- | --------------------------------------------------- | -------------------------------- |
 | `activities.urlReward`    | boolean | `true`  | Complete URL reward activities                      | `CONFIG_ACTIVITY_URL_REWARD`     |
 | `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                       | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
-| `activities.quiz`         | boolean | `true`  | Solve quiz/puzzle activities (hybrid API + browser) | —                                |
+| `activities.quiz`         | boolean | `true`  | Solve quiz/puzzle activities (hybrid API + browser) | `CONFIG_ACTIVITY_QUIZ`           |
 
 ### Search Settings
 
@@ -232,7 +232,7 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 | `searchSettings.parallelSearching`      | boolean  | `true`                              | Run searches in parallel                                                  | `CONFIG_SEARCH_PARALLEL`           |
 | `searchSettings.clusterSearch`          | boolean  | `true`                              | Cluster each main topic with Bing suggestions                             | `CONFIG_SEARCH_CLUSTER`            |
 | `searchSettings.queryEngines`           | string[] | see [Query sources](#query-sources) | Sources used to build the search query pool                               | `CONFIG_SEARCH_QUERY_ENGINES` \*   |
-| `searchSettings.crossAccountQueryDedup` | boolean  | `true`                              | Prevent the same search query being used by more than one account per day | —                                  |
+| `searchSettings.crossAccountQueryDedup` | boolean  | `true`                              | Prevent the same search query being used by more than one account per day | `CONFIG_SEARCH_CROSS_ACCOUNT_DEDUP` |
 | `searchSettings.searchResultVisitTime`  | string   | `"10sec"`                           | Time to spend on each search result                                       | `CONFIG_SEARCH_VISIT_TIME`         |
 | `searchSettings.searchDelay.min`        | string   | `"30sec"`                           | Minimum delay between searches                                            | `CONFIG_SEARCH_DELAY_MIN`          |
 | `searchSettings.searchDelay.max`        | string   | `"1min"`                            | Maximum delay between searches                                            | `CONFIG_SEARCH_DELAY_MAX`          |
@@ -259,15 +259,20 @@ Core sources:
 
 RSS feeds use a dotted path - `rss` for every feed, `rss.<site>` for a whole site, or `rss.<site>.<endpoint>` for a single feed:
 
-| Selector           | Feeds                                                          |
-| ------------------ | -------------------------------------------------------------- |
-| `rss.googleTrends` | Google Trends RSS (`gb`, `us`)                                 |
-| `rss.googleNews`   | Google News (`gb`, `us`, `world`, `technology`, `business`)    |
-| `rss.bbc`          | BBC News (`top`, `world`, `technology`, `business`, `science`) |
-| `rss.guardian`     | The Guardian (`international`, `world`, `technology`)          |
-| `rss.theVerge`     | The Verge (`all`)                                              |
-| `rss.arsTechnica`  | Ars Technica (`all`)                                           |
-| `rss.reddit`       | Reddit listing feeds (`popular`, `worldnews`, `technology`)    |
+| Selector            | Feeds                                                            |
+| ------------------- | ---------------------------------------------------------------- |
+| `rss.googleTrends`  | Google Trends RSS (`gb`, `us`, `es`)                             |
+| `rss.googleNews`    | Google News (`gb`, `us`, `es`, `world`, `technology`, `business`) |
+| `rss.bbc`           | BBC News (`top`, `world`, `technology`, `business`, `science`)   |
+| `rss.guardian`      | The Guardian (`international`, `world`, `technology`)            |
+| `rss.theVerge`      | The Verge (`all`)                                                |
+| `rss.arsTechnica`   | Ars Technica (`all`)                                             |
+| `rss.reddit`        | Reddit listing feeds (`popular`, `worldnews`, `technology`)      |
+| `rss.elPais`        | El País (`portada`)                                              |
+| `rss.elMundo`       | El Mundo (`portada`)                                             |
+| `rss.rtve`          | RTVE noticias (`noticias`)                                       |
+| `rss.veinteMinutos` | 20minutos (`portada`)                                            |
+| `rss.marca`         | Marca - deportes (`portada`)                                     |
 
 Add your own feeds in `src/constants/rssFeeds.ts`.
 
@@ -276,16 +281,15 @@ Default:
 ```json
 [
     "google",
+    "rss.googleTrends.es",
+    "rss.googleNews.es",
+    "rss.elPais",
+    "rss.rtve",
+    "rss.elMundo",
+    "rss.veinteMinutos",
+    "rss.marca",
     "wikipedia",
-    "wikirandom",
-    "hackernews",
-    "reddit",
-    "local",
-    "rss.googleTrends",
-    "rss.googleNews",
-    "rss.bbc",
-    "rss.guardian.world",
-    "rss.theVerge.all"
+    "local"
 ]
 ```
 
