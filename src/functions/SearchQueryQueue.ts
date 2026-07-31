@@ -1,5 +1,8 @@
+import path from 'path'
+
 import type { MicrosoftRewardsBot } from '../index'
 import { normalizeQueryKey, QueryCore } from './QueryEngine'
+import { SearchQueryLedger } from './SearchQueryLedger'
 
 export class SearchQueryQueue {
     private topics: string[] = []
@@ -10,13 +13,36 @@ export class SearchQueryQueue {
     private activeClusterIndex = 0
     private readonly seenTopics = new Set<string>()
     private readonly seenQueries = new Set<string>()
+    private readonly ledger: SearchQueryLedger | null
 
     constructor(
         private readonly bot: MicrosoftRewardsBot,
         private readonly queryCore = new QueryCore(bot)
-    ) {}
+    ) {
+        this.ledger = bot.config.searchSettings.crossAccountQueryDedup
+            ? new SearchQueryLedger(path.join(path.resolve(process.cwd(), bot.config.sessionPath), 'search-history'))
+            : null
+    }
+
+    private syncLedger(): void {
+        if (!this.ledger) return
+        const before = this.seenQueries.size
+        for (const key of this.ledger.load()) this.seenQueries.add(key)
+        const added = this.seenQueries.size - before
+        if (added > 0) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'QUERY-QUEUE',
+                `Ledger sync | queriesUsedByOtherAccounts=${added} | totalSeen=${this.seenQueries.size}`
+            )
+        }
+    }
 
     async prepare(): Promise<number> {
+        if (this.ledger) {
+            this.ledger.cleanup()
+            this.syncLedger()
+        }
         if (!this.topics.length) await this.refillTopics()
         this.bot.logger.debug(
             this.bot.isMobile,
@@ -46,6 +72,8 @@ export class SearchQueryQueue {
                 return null
             }
 
+            this.syncLedger()
+
             const cluster = await this.queryCore.getSearchCluster(mainTopic)
             let skippedSeen = 0
             this.activeCluster = cluster.filter(query => {
@@ -70,6 +98,8 @@ export class SearchQueryQueue {
 
         const query = this.activeCluster.shift() ?? null
         if (!query) return null
+
+        this.ledger?.record(query)
 
         this.activeClusterIndex++
         this.bot.logger.debug(
