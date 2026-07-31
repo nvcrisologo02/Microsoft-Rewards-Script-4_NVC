@@ -24,6 +24,12 @@ export class Workers {
         this.bot = bot
     }
 
+    /** Resets accumulated skip records; call at the start of each account run so a
+     *  thrown error before reportSkippedTypes() cannot leak entries into the next account. */
+    public clearSkippedTypes(): void {
+        this.skippedTypes = []
+    }
+
     public async doDailySet(data: DashboardData) {
         const todayKey = this.bot.utils.getFormattedDate()
         const todayData = data.dashboard.dailySetPromotions[todayKey]

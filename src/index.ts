@@ -731,6 +731,7 @@ export class MicrosoftRewardsBot {
                 this.userData.currentPoints = data.dashboard.userStatus.availablePoints
                 this.userData.gainedPoints = 0
                 this.pointsBySource = {}
+                this.workers.clearSkippedTypes()
                 const initialPoints = this.userData.initialPoints ?? 0
 
                 const browserEarnable = await this.browser.func.getBrowserEarnablePoints()
@@ -915,7 +916,11 @@ export class MicrosoftRewardsBot {
                     this.logger.debug('main', 'EARNINGS-ALERT', `Failed to update earnings history: ${error}`)
                 }
 
-                this.workers.reportSkippedTypes()
+                try {
+                    this.workers.reportSkippedTypes()
+                } catch (error) {
+                    this.logger.debug('main', 'ACTIVITY-GAPS', `Failed to report skipped activity types: ${error}`)
+                }
 
                 return {
                     initialPoints,

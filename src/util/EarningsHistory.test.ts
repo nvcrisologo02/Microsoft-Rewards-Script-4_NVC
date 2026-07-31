@@ -42,3 +42,19 @@ test('un directorio no escribible no lanza', () => {
     assert.doesNotThrow(() => h.record('a@b.com', 0))
     assert.equal(h.zeroStreak('a@b.com'), 0)
 })
+
+test('una línea corrupta se ignora sin perder las entradas válidas', () => {
+    const dir = tmpDir()
+    const h = new EarningsHistory(dir)
+    h.record('a@b.com', 0)
+    const accountFile = path.join(dir, 'a_b_com.ndjson')
+    fs.appendFileSync(accountFile, 'this is not valid json\n', 'utf-8')
+    h.record('a@b.com', 0)
+    assert.equal(h.zeroStreak('a@b.com'), 2)
+})
+
+test('prune limita a 30 entradas por cuenta', () => {
+    const h = new EarningsHistory(tmpDir())
+    for (let i = 0; i < 35; i++) h.record('a@b.com', 0)
+    assert.equal(h.zeroStreak('a@b.com'), 30)
+})
