@@ -915,6 +915,8 @@ export class MicrosoftRewardsBot {
                     this.logger.debug('main', 'EARNINGS-ALERT', `Failed to update earnings history: ${error}`)
                 }
 
+                this.workers.reportSkippedTypes()
+
                 return {
                     initialPoints,
                     collectedPoints: collectedPoints || 0

@@ -18,6 +18,7 @@ const LINK_OFFER_PATTERN = /https:\/\/(?:www\.)?bing\.com\/[^"'\s\\<>]*PROGRAMNA
 
 export class Workers {
     public bot: MicrosoftRewardsBot
+    private skippedTypes: { type: string; title: string; points: number }[] = []
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
@@ -767,6 +768,11 @@ export class Workers {
                             'ACTIVITY',
                             `Skipped activity "${activity.title}" | offerId=${offerId} | Reason: Unsupported type "${activity.promotionType}"`
                         )
+                        this.skippedTypes.push({
+                            type: activity.promotionType ?? 'unknown',
+                            title: activity.title ?? '',
+                            points: activity.pointProgressMax ?? 0
+                        })
                         break
                     }
                 }
@@ -780,6 +786,37 @@ export class Workers {
                 )
             }
         }
+    }
+
+    /** One line per run listing activity types this build cannot claim yet. */
+    public reportSkippedTypes(): void {
+        if (!this.skippedTypes.length) return
+
+        const byType = new Map<string, { count: number; points: number; example: string }>()
+        for (const item of this.skippedTypes) {
+            const entry = byType.get(item.type) ?? { count: 0, points: 0, example: item.title }
+            entry.count++
+            entry.points += item.points
+            byType.set(item.type, entry)
+        }
+
+        const claimable = [...byType.entries()].filter(([, entry]) => entry.points > 0)
+        const summary = [...byType.entries()]
+            .map(([type, entry]) => `${type} x${entry.count} (${entry.points}pts, e.g. "${entry.example}")`)
+            .join(' | ')
+
+        const message = `Unsupported activity types this run | ${summary}`
+        if (claimable.length) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'ACTIVITY-GAPS',
+                `${message} - these award points and are not claimed by any current mechanism`
+            )
+        } else {
+            this.bot.logger.info(this.bot.isMobile, 'ACTIVITY-GAPS', message)
+        }
+
+        this.skippedTypes = []
     }
 
     // Util
