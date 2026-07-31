@@ -3,7 +3,6 @@ import type { Page } from 'patchright'
 import { URLs } from '../../constants/urls'
 import { Workers } from '../Workers'
 import { reportOfferActivity } from './api/ReportPromotion'
-import type { HttpRequestConfig } from '../../util/Http'
 import type { BasePromotion } from '../../interface/DashboardData'
 
 const MAX_QUIZ_REPORTS = 20
@@ -19,6 +18,10 @@ const ANSWER_OPTION_SELECTOR = '[id^="rqAnswerOption"], #btoption0, #btoption1, 
 
 export class Quiz extends Workers {
     public async doQuiz(promotion: BasePromotion, page: Page): Promise<void> {
+        await this.runQuiz(promotion, page, true)
+    }
+
+    private async runQuiz(promotion: BasePromotion, page: Page, allowSessionRepair: boolean): Promise<void> {
         const offerId = promotion.offerId
         const startBalance = Number(this.bot.userData.currentPoints ?? 0)
 
@@ -52,6 +55,7 @@ export class Quiz extends Workers {
                 return
             }
 
+            const oldBalance = this.bot.userData.currentPoints
             const outcome = await reportOfferActivity(this.bot, live, promotion)
             if (outcome.gained > 0) {
                 this.bot.logger.info(
@@ -61,6 +65,49 @@ export class Quiz extends Workers {
                     'green'
                 )
                 return
+            }
+
+            if (outcome.acknowledged) {
+                // The dashboard sometimes credits a few seconds after acknowledging.
+                // Let it settle before escalating, otherwise phase 2 claims phase 1's points.
+                await this.bot.utils.wait(this.bot.utils.randomDelay(3000, 5000))
+                const settledBalance = await this.bot.browser.func.getCurrentPoints()
+                const settledGain = settledBalance - oldBalance
+
+                if (settledGain > 0) {
+                    this.bot.userData.currentPoints = settledBalance
+                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + settledGain
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'QUIZ',
+                        `Completed quiz via server action (credited after settle) | offerId=${offerId} | pointsGained=${settledGain} | currentBalance=${settledBalance}`,
+                        'green'
+                    )
+                    return
+                }
+
+                if (live.points === 0) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'QUIZ',
+                        `Completed quiz (no points by design) | offerId=${offerId} | acknowledged=true | pointsGained=0 | currentBalance=${settledBalance}`,
+                        'green'
+                    )
+                    return
+                }
+            }
+
+            if (allowSessionRepair && !outcome.acknowledged && live.points > 0 && this.bot.currentSessionWasRestored) {
+                const repaired = await this.bot.repairCurrentBrowserSession(`QUIZ:${offerId}`)
+                if (repaired) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'QUIZ',
+                        `Retrying quiz once with the refreshed session | offerId=${offerId}`
+                    )
+                    await this.runQuiz(promotion, page, false)
+                    return
+                }
             }
 
             this.bot.logger.info(
@@ -107,37 +154,23 @@ export class Quiz extends Workers {
     }
 
     private async legacyQuizLoop(offerId: string): Promise<number> {
-        const cookieHeader = this.bot.browser.func.buildCookieHeader(
-            this.bot.isMobile ? this.bot.cookies.mobile : this.bot.cookies.desktop,
-            ['bing.com', 'live.com', 'microsoftonline.com']
-        )
-        const fingerprintHeaders = { ...this.bot.fingerprint.headers }
-        delete fingerprintHeaders['Cookie']
-        delete fingerprintHeaders['cookie']
-
         let oldBalance = this.bot.userData.currentPoints
         let totalGained = 0
+        let ig: string | null = null
 
         for (let attempt = 1; attempt <= MAX_QUIZ_REPORTS; attempt++) {
             try {
-                const request: HttpRequestConfig = {
-                    url: URLs.bing.quizReport,
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                        cookie: cookieHeader,
-                        ...fingerprintHeaders
-                    },
-                    data: JSON.stringify({
-                        UserId: null,
-                        timeZone: this.bot.userData.timezoneOffset,
-                        OfferId: offerId,
-                        ActivityCount: 1,
-                        QuestionIndex: '-1'
-                    })
-                }
+                const report = await this.bot.browser.func.reportQuizActivity(offerId, { ig, questionIndex: -1 })
+                ig = report.ig
 
-                await this.bot.http.request(request)
+                if (report.status < 200 || report.status >= 300) {
+                    this.bot.logger.debug(
+                        this.bot.isMobile,
+                        'QUIZ',
+                        `Legacy ReportActivity returned a non-2xx status | attempt=${attempt} | offerId=${offerId} | status=${report.status}`
+                    )
+                    break
+                }
 
                 const newBalance = await this.bot.browser.func.getCurrentPoints()
                 const gained = newBalance - oldBalance
@@ -157,10 +190,12 @@ export class Quiz extends Workers {
 
                 await this.bot.utils.wait(this.bot.utils.randomDelay(5000, 7000))
             } catch (error) {
+                // Http throws on any non-2xx, so failed statuses land here with the code in the message
+                const status = (error as { status?: number })?.status
                 this.bot.logger.debug(
                     this.bot.isMobile,
                     'QUIZ',
-                    `Legacy ReportActivity failed | attempt=${attempt} | offerId=${offerId} | ${error instanceof Error ? error.message : String(error)}`
+                    `Legacy ReportActivity failed | attempt=${attempt} | offerId=${offerId} | status=${status ?? 'n/a'} | ${error instanceof Error ? error.message : String(error)}`
                 )
                 break
             }
