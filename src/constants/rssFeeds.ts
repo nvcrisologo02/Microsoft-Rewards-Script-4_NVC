@@ -11,13 +11,15 @@ export const RSS_FEEDS: Record<string, Record<string, string>> = {
     // Trending search terms
     googleTrends: {
         gb: 'https://trends.google.com/trending/rss?geo=GB',
-        us: 'https://trends.google.com/trending/rss?geo=US'
+        us: 'https://trends.google.com/trending/rss?geo=US',
+        es: 'https://trends.google.com/trending/rss?geo=ES'
     },
 
     // Aggregated headlines
     googleNews: {
         gb: 'https://news.google.com/rss?hl=en-GB&gl=GB&ceid=GB:en',
         us: 'https://news.google.com/rss?hl=en-US&gl=US&ceid=US:en',
+        es: 'https://news.google.com/rss?hl=es&gl=ES&ceid=ES:es',
         world: 'https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en',
         technology: 'https://news.google.com/rss/headlines/section/topic/TECHNOLOGY?hl=en-US&gl=US&ceid=US:en',
         business: 'https://news.google.com/rss/headlines/section/topic/BUSINESS?hl=en-US&gl=US&ceid=US:en'
@@ -54,5 +56,30 @@ export const RSS_FEEDS: Record<string, Record<string, string>> = {
         popular: 'https://www.reddit.com/r/popular/.rss',
         worldnews: 'https://www.reddit.com/r/worldnews/.rss',
         technology: 'https://www.reddit.com/r/technology/.rss'
+    },
+
+    // El País
+    elPais: {
+        portada: 'https://feeds.elpais.com/mrss-s/pages/ep/site/elpais.com/portada'
+    },
+
+    // El Mundo
+    elMundo: {
+        portada: 'https://e00-elmundo.uecdn.es/elmundo/rss/portada.xml'
+    },
+
+    // RTVE
+    rtve: {
+        noticias: 'https://api2.rtve.es/rss/temas_noticias.xml'
+    },
+
+    // 20minutos
+    veinteMinutos: {
+        portada: 'https://www.20minutos.es/rss/'
+    },
+
+    // Marca (deportes)
+    marca: {
+        portada: 'https://e00-marca.uecdn.es/rss/portada.xml'
     }
 }
