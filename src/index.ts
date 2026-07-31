@@ -398,7 +398,7 @@ export class MicrosoftRewardsBot {
                     resolve()
                 })
 
-                worker.on('error', (error) => {
+                worker.on('error', error => {
                     if (settled) {
                         return
                     }
@@ -419,7 +419,8 @@ export class MicrosoftRewardsBot {
         await runScheduled(accounts, account => runOne(account), {
             maxConcurrent,
             shuffle: this.config.shuffleAccounts,
-            jitterMs: () => this.utils.randomDelay(this.config.accountStartDelay.min, this.config.accountStartDelay.max),
+            jitterMs: () =>
+                this.utils.randomDelay(this.config.accountStartDelay.min, this.config.accountStartDelay.max),
             wait: (msDelay: number) => this.utils.wait(msDelay),
             shuffleArray: <T>(a: T[]): T[] => this.utils.shuffleArray(a),
             onError: (_item, error) => {
@@ -770,6 +771,7 @@ export class MicrosoftRewardsBot {
                             await this.punchcardManager.runDesktop()
                             if (doVisualSearch) await this.activities.doVisualSearch(data)
                             if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
+                            if (this.config.workers.doMorePromotions) await this.workers.doBingLinkOffers()
                         })
                         await closeDesktopSession()
                     }
@@ -810,6 +812,7 @@ export class MicrosoftRewardsBot {
                             await this.punchcardManager.runDesktop()
                             if (doVisualSearch) await this.activities.doVisualSearch(data)
                             if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
+                            if (this.config.workers.doMorePromotions) await this.workers.doBingLinkOffers()
                         })
 
                         const mobileWork = async (): Promise<[number, number]> => {
@@ -844,7 +847,9 @@ export class MicrosoftRewardsBot {
 
                                 await this.punchcardManager.runDesktop()
                                 if (doVisualSearch) await this.activities.doVisualSearch(data)
-                                if (this.config.workers.doMorePromotions) await this.workers.sweepEarnSnapshotOffers(data)
+                                if (this.config.workers.doMorePromotions)
+                                    await this.workers.sweepEarnSnapshotOffers(data)
+                                if (this.config.workers.doMorePromotions) await this.workers.doBingLinkOffers()
                                 if (doDesktopSearch && !apiSearch) {
                                     desktopPoints = await this.searchManager.searchDesktop(account)
                                 }

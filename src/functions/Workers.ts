@@ -1,3 +1,5 @@
+import type { Page } from 'patchright'
+
 import { URLs } from '../constants/urls'
 import type { MicrosoftRewardsBot } from '../index'
 import type { DashboardData, PunchCard, BasePromotion } from '../interface/DashboardData'
@@ -6,6 +8,12 @@ import type { QuestChild, ParentQuest } from '../browser/ReactFunc'
 import { reportOfferActivity } from './activities/api/ReportPromotion'
 
 const MAX_SWEEP_OFFERS = 10
+const MAX_LINK_OFFERS = 6
+
+// "Seguir ganando" cards are plain links to Bing daily offers (PROGRAMNAME=BingDailyOfferIN,
+// QuoteOfTheDay...). They carry no offerId/hash - Bing credits them on visiting the URL with
+// the form code while logged in. Completed ones are marked with rnoreward=1 in the href.
+const LINK_OFFER_PATTERN = /https:\/\/(?:www\.)?bing\.com\/[^"'\s\\<>]*PROGRAMNAME=[^"'\s\\<>]*/g
 
 export class Workers {
     public bot: MicrosoftRewardsBot
@@ -192,6 +200,129 @@ export class Workers {
                 `Sweep failed | ${error instanceof Error ? error.message : String(error)}`
             )
         }
+    }
+
+    public async doBingLinkOffers() {
+        if (this.bot.isMobile) return
+        if (!this.bot.config.activities.quiz) {
+            this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', 'Skipping Bing link offers (activities.quiz=false)')
+            return
+        }
+
+        const page = this.bot.mainDesktopPage
+        if (!page || page.isClosed()) {
+            this.bot.logger.debug(this.bot.isMobile, 'LINK-OFFERS', 'No desktop page available, skipping')
+            return
+        }
+
+        try {
+            const urls = await this.collectLinkOfferUrls(page)
+            if (!urls.length) {
+                this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', 'No pending Bing link offers found on /earn')
+                return
+            }
+
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                `Found ${urls.length} pending link offer(s) | ${urls.join(' | ')}`
+            )
+
+            let oldBalance = await this.bot.browser.func.getCurrentPoints()
+
+            for (const url of urls) {
+                try {
+                    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+                    await this.bot.utils.wait(this.bot.utils.randomDelay(8000, 12000))
+
+                    const newBalance = await this.bot.browser.func.getCurrentPoints()
+                    const gained = newBalance - oldBalance
+
+                    if (gained > 0) {
+                        this.bot.userData.currentPoints = newBalance
+                        this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                        oldBalance = newBalance
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'LINK-OFFERS',
+                            `Link offer credited | pointsGained=${gained} | currentBalance=${newBalance} | url=${url}`,
+                            'green'
+                        )
+                    } else {
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'LINK-OFFERS',
+                            `Link offer visit did not credit | url=${url}`
+                        )
+                    }
+                } catch (error) {
+                    this.bot.logger.warn(
+                        this.bot.isMobile,
+                        'LINK-OFFERS',
+                        `Error visiting link offer | url=${url} | ${error instanceof Error ? error.message : String(error)}`
+                    )
+                }
+
+                await this.bot.utils.wait(this.bot.utils.randomDelay(3000, 8000))
+            }
+
+            await page.goto(URLs.bing.origin).catch(() => {})
+        } catch (error) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                `Link offer sweep failed | ${error instanceof Error ? error.message : String(error)}`
+            )
+        }
+    }
+
+    private async collectLinkOfferUrls(page: Page): Promise<string[]> {
+        const html = await this.bot.browser.func.getRewardsPageHtml(URLs.rewards.earn, '/earn')
+        let urls = this.filterLinkOfferUrls(
+            (html ?? '').replace(/&amp;/g, '&').replace(/\\u0026/gi, '&').match(LINK_OFFER_PATTERN) ?? []
+        )
+        if (urls.length) return urls
+
+        // Section may only exist in the hydrated DOM - render /earn and scrape hrefs
+        try {
+            await page.goto(URLs.rewards.earn, { waitUntil: 'domcontentloaded', timeout: 30000 })
+            await this.bot.utils.wait(5000)
+            const hrefs = await page.$$eval('a[href*="PROGRAMNAME="]', links =>
+                links.map(link => (link as HTMLAnchorElement).href)
+            )
+            urls = this.filterLinkOfferUrls(hrefs)
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                `DOM scrape | anchors=${hrefs.length} | pending=${urls.length}`
+            )
+        } catch (error) {
+            this.bot.logger.debug(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                `DOM scrape failed | ${error instanceof Error ? error.message : String(error)}`
+            )
+        }
+        return urls
+    }
+
+    private filterLinkOfferUrls(rawUrls: string[]): string[] {
+        const seen = new Set<string>()
+        const out: string[] = []
+
+        for (const raw of rawUrls) {
+            const url = raw.trim()
+            if (!/PROGRAMNAME=/i.test(url)) continue
+            if (/rnoreward=1/i.test(url)) continue
+
+            // Cards can share the same offer (e.g. both puzzles use form=ML2BF0) - dedupe by form code
+            const key = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1]?.toUpperCase() ?? url
+            if (seen.has(key)) continue
+            seen.add(key)
+            out.push(url)
+        }
+
+        return out.slice(0, MAX_LINK_OFFERS)
     }
 
     public async doAppPromotions(data: AppDashboardData) {
