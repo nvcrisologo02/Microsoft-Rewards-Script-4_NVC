@@ -18,7 +18,7 @@ export interface ReportOutcome {
 export async function reportOfferActivity(
     bot: MicrosoftRewardsBot,
     live: ParsedOffer,
-    promotion: BasePromotion
+    promotion: Pick<BasePromotion, 'offerId'> & Partial<Pick<BasePromotion, 'activityType'>>
 ): Promise<ReportOutcome> {
     const actionId = bot.nextActions.reportActivity
     if (!actionId) {
