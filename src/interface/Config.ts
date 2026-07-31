@@ -36,6 +36,7 @@ export interface ConfigSearchSettings {
     parallelSearching: boolean
     clusterSearch: boolean
     queryEngines: QueryEngineEntry[]
+    crossAccountQueryDedup: boolean
     searchResultVisitTime: number | string
     searchDelay: ConfigDelay
     readDelay: ConfigDelay
@@ -73,6 +74,7 @@ export interface ConfigWorkers {
 export interface ConfigActivities {
     urlReward: boolean
     searchOnBing: boolean
+    quiz: boolean
 }
 
 // Webhooks

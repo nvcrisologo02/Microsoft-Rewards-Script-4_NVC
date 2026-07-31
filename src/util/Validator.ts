@@ -106,9 +106,10 @@ export const ConfigSchema = z.object({
     activities: z
         .object({
             urlReward: z.boolean().default(true),
-            searchOnBing: z.boolean().default(true)
+            searchOnBing: z.boolean().default(true),
+            quiz: z.boolean().default(true)
         })
-        .default({ urlReward: true, searchOnBing: true }),
+        .default({ urlReward: true, searchOnBing: true, quiz: true }),
     searchOnBingLocalQueries: z.boolean(),
     globalTimeout: NumberOrString,
     searchSettings: z.object({
@@ -119,6 +120,7 @@ export const ConfigSchema = z.object({
         parallelSearching: z.boolean(),
         clusterSearch: z.boolean().default(true),
         queryEngines: z.array(QueryEngineSchema),
+        crossAccountQueryDedup: z.boolean().default(true),
         searchResultVisitTime: NumberOrString,
         searchDelay: DelaySchema,
         readDelay: DelaySchema
@@ -185,7 +187,8 @@ const defaultConfig: Config = {
     },
     activities: {
         urlReward: true,
-        searchOnBing: true
+        searchOnBing: true,
+        quiz: true
     },
     searchOnBingLocalQueries: false,
     globalTimeout: '30sec',
@@ -197,6 +200,7 @@ const defaultConfig: Config = {
         parallelSearching: true,
         clusterSearch: true,
         queryEngines: ['google', 'wikipedia', 'wikirandom', 'hackernews', 'reddit', 'local'],
+        crossAccountQueryDedup: true,
         searchResultVisitTime: '10sec',
         searchDelay: { min: '30sec', max: '1min' },
         readDelay: { min: '30sec', max: '1min' }
