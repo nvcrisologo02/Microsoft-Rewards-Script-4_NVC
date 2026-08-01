@@ -58,6 +58,8 @@ export class Search extends Workers {
                     continue
                 }
 
+                queryQueue.markSucceeded(query)
+
                 if (res.balance != null) this.bot.userData.currentPoints = res.balance
 
                 const earned = res.searchPointsEarned
@@ -71,7 +73,7 @@ export class Search extends Workers {
 
                 if (gained > 0) {
                     totalGained += gained
-                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                    this.bot.creditPoints('search', gained)
                 }
 
                 if (searchProgress > 0) {
@@ -172,6 +174,8 @@ export class Search extends Workers {
                     this.bot.logger.warn(isMobile, tracker.context, `No IG for query="${query}" - skipping`)
                     continue
                 }
+
+                queryQueue.markSucceeded(query)
 
                 const gained = await tracker.measure()
                 if (gained > 0) {

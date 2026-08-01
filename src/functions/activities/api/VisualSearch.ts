@@ -308,7 +308,7 @@ export class VisualSearch extends Workers {
 
             const gained = res.gained ?? 0
             if (gained > 0) {
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                this.bot.creditPoints('visualSearch', gained)
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'VISUAL-SEARCH',

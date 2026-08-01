@@ -29,7 +29,8 @@
     "activities": {
         "urlReward": true,
         "searchOnBing": true,
-        "quiz": true
+        "quiz": true,
+        "linkOffers": true
     },
     "searchOnBingLocalQueries": false,
     "globalTimeout": "30sec",

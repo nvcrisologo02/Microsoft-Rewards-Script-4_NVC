@@ -112,8 +112,9 @@ export class Search extends Workers {
                     break
                 }
 
-                await this.bingSearch(page, query, isMobile)
+                const succeeded = await this.bingSearch(page, query, isMobile)
                 stats.performed++
+                if (succeeded) queryQueue.markSucceeded(query)
 
                 const gained = await tracker.measure()
                 if (gained > 0) {
@@ -145,7 +146,7 @@ export class Search extends Workers {
             return stats
         }
     }
-    private async bingSearch(page: Page, query: string, isMobile: boolean): Promise<void> {
+    private async bingSearch(page: Page, query: string, isMobile: boolean): Promise<boolean> {
         this.searchCount++
 
         if (this.searchCount % REFRESH_EVERY === 0) {
@@ -186,7 +187,7 @@ export class Search extends Workers {
                     )
                 )
 
-                return
+                return true
             } catch (error) {
                 this.bot.logger.warn(
                     isMobile,
@@ -196,6 +197,8 @@ export class Search extends Workers {
                 await this.bot.utils.wait(2000)
             }
         }
+
+        return false
     }
 
     private async randomScroll(page: Page, isMobile: boolean) {
@@ -288,8 +291,8 @@ class PointsTracker implements SearchTracker {
         this.missing = updated
 
         if (gained > 0) {
-            this.bot.userData.currentPoints = Number(this.bot.userData.currentPoints ?? 0) + gained
-            this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+            const newBalance = Number(this.bot.userData.currentPoints ?? 0) + gained
+            this.bot.creditPoints('search', gained, newBalance)
         }
         return gained
     }

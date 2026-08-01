@@ -16,11 +16,42 @@ const MAX_LINK_OFFERS = 6
 // the form code while logged in. Completed ones are marked with rnoreward=1 in the href.
 const LINK_OFFER_PATTERN = /https:\/\/(?:www\.)?bing\.com\/[^"'\s\\<>]*PROGRAMNAME=[^"'\s\\<>]*/g
 
+export function linkOfferVisitKey(email: string, url: string): string {
+    const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
+    return `${email}|${form}`.toLowerCase()
+}
+
+export function filterLinkOfferUrls(rawUrls: string[]): string[] {
+    const seen = new Set<string>()
+    const out: string[] = []
+
+    for (const raw of rawUrls) {
+        const url = raw.trim()
+        if (!/PROGRAMNAME=/i.test(url)) continue
+        if (/rnoreward=1/i.test(url)) continue
+
+        // Cards can share the same offer (e.g. both puzzles use form=ML2BF0) - dedupe by form code
+        const key = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1]?.toUpperCase() ?? url
+        if (seen.has(key)) continue
+        seen.add(key)
+        out.push(url)
+    }
+
+    return out.slice(0, MAX_LINK_OFFERS)
+}
+
 export class Workers {
     public bot: MicrosoftRewardsBot
+    private skippedTypes: { type: string; title: string; points: number }[] = []
 
     constructor(bot: MicrosoftRewardsBot) {
         this.bot = bot
+    }
+
+    /** Resets accumulated skip records; call at the start of each account run so a
+     *  thrown error before reportSkippedTypes() cannot leak entries into the next account. */
+    public clearSkippedTypes(): void {
+        this.skippedTypes = []
     }
 
     public async doDailySet(data: DashboardData) {
@@ -166,9 +197,12 @@ export class Workers {
 
             for (const offer of candidates) {
                 try {
-                    const { status, acknowledged, gained, newBalance } = await reportOfferActivity(this.bot, offer, {
-                        offerId: offer.offerId
-                    })
+                    const { status, acknowledged, gained, newBalance } = await reportOfferActivity(
+                        this.bot,
+                        offer,
+                        { offerId: offer.offerId },
+                        'earnSweep'
+                    )
 
                     if (gained > 0) {
                         this.bot.logger.info(
@@ -205,8 +239,12 @@ export class Workers {
 
     public async doBingLinkOffers() {
         if (this.bot.isMobile) return
-        if (!this.bot.config.activities.quiz) {
-            this.bot.logger.info(this.bot.isMobile, 'LINK-OFFERS', 'Skipping Bing link offers (activities.quiz=false)')
+        if (!this.bot.config.activities.linkOffers) {
+            this.bot.logger.info(
+                this.bot.isMobile,
+                'LINK-OFFERS',
+                'Skipping Bing link offers (activities.linkOffers=false)'
+            )
             return
         }
 
@@ -227,8 +265,24 @@ export class Workers {
             const visitedToday = visitedLedger.load()
             const accountEmail = (this.bot.currentAccountEmail ?? '').toLowerCase()
 
+            const discovered = [...visitedToday].filter(key => key.startsWith('discovered|'))
+            if (discovered.length) {
+                const pendingKnown = discovered.filter(
+                    key => !visitedToday.has(`${accountEmail}|${key.slice('discovered|'.length)}`)
+                )
+                if (!pendingKnown.length) {
+                    this.bot.logger.info(
+                        this.bot.isMobile,
+                        'LINK-OFFERS',
+                        `All ${discovered.length} link offer(s) discovered today were already visited by this account, skipping the /earn render`
+                    )
+                    return
+                }
+            }
+
             const collected = await this.collectLinkOfferUrls(page)
-            const urls = collected.filter(url => !visitedToday.has(this.linkOfferVisitKey(accountEmail, url)))
+            for (const url of collected) visitedLedger.record(this.linkOfferDiscoveryKey(url))
+            const urls = collected.filter(url => !visitedToday.has(linkOfferVisitKey(accountEmail, url)))
 
             if (!urls.length) {
                 this.bot.logger.info(
@@ -253,15 +307,14 @@ export class Workers {
             for (const url of urls) {
                 try {
                     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-                    visitedLedger.record(this.linkOfferVisitKey(accountEmail, url))
+                    visitedLedger.record(linkOfferVisitKey(accountEmail, url))
                     await this.bot.utils.wait(this.bot.utils.randomDelay(8000, 12000))
 
                     const newBalance = await this.bot.browser.func.getCurrentPoints()
                     const gained = newBalance - oldBalance
 
                     if (gained > 0) {
-                        this.bot.userData.currentPoints = newBalance
-                        this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                        this.bot.creditPoints('linkOffers', gained, newBalance)
                         oldBalance = newBalance
                         this.bot.logger.info(
                             this.bot.isMobile,
@@ -294,8 +347,10 @@ export class Workers {
             const settledBalance = await this.bot.browser.func.getCurrentPoints()
             const batchGained = settledBalance - startBalance
             if (batchGained > 0) {
+                // Keep the balance in sync even if the settle read came back lower than the
+                // last per-offer read: later activities seed their old balance from it
                 this.bot.userData.currentPoints = settledBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + (settledBalance - oldBalance)
+                this.bot.creditPoints('linkOffers', settledBalance - oldBalance)
                 this.bot.logger.info(
                     this.bot.isMobile,
                     'LINK-OFFERS',
@@ -320,7 +375,7 @@ export class Workers {
 
     private async collectLinkOfferUrls(page: Page): Promise<string[]> {
         const html = await this.bot.browser.func.getRewardsPageHtml(URLs.rewards.earn, '/earn')
-        let urls = this.filterLinkOfferUrls(
+        let urls = filterLinkOfferUrls(
             (html ?? '').replace(/&amp;/g, '&').replace(/\\u0026/gi, '&').match(LINK_OFFER_PATTERN) ?? []
         )
         if (urls.length) return urls
@@ -346,7 +401,7 @@ export class Workers {
             const hrefs = await page.$$eval('a[href*="PROGRAMNAME="]', links =>
                 links.map(link => (link as HTMLAnchorElement).href)
             )
-            urls = this.filterLinkOfferUrls(hrefs)
+            urls = filterLinkOfferUrls(hrefs)
 
             const totalAnchors = await page
                 .locator('a')
@@ -376,28 +431,9 @@ export class Workers {
         return urls
     }
 
-    private linkOfferVisitKey(email: string, url: string): string {
+    private linkOfferDiscoveryKey(url: string): string {
         const form = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1] ?? url
-        return `${email}|${form}`.toLowerCase()
-    }
-
-    private filterLinkOfferUrls(rawUrls: string[]): string[] {
-        const seen = new Set<string>()
-        const out: string[] = []
-
-        for (const raw of rawUrls) {
-            const url = raw.trim()
-            if (!/PROGRAMNAME=/i.test(url)) continue
-            if (/rnoreward=1/i.test(url)) continue
-
-            // Cards can share the same offer (e.g. both puzzles use form=ML2BF0) - dedupe by form code
-            const key = /[?&]form=([A-Za-z0-9]+)/i.exec(url)?.[1]?.toUpperCase() ?? url
-            if (seen.has(key)) continue
-            seen.add(key)
-            out.push(url)
-        }
-
-        return out.slice(0, MAX_LINK_OFFERS)
+        return `discovered|${form}`.toLowerCase()
     }
 
     public async doAppPromotions(data: AppDashboardData) {
@@ -658,8 +694,7 @@ export class Workers {
             const newBalance = await this.bot.browser.func.getCurrentPoints()
             const gained = newBalance - oldBalance
             if (gained > 0) {
-                this.bot.userData.currentPoints = newBalance
-                this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + gained
+                this.bot.creditPoints('punchcard', gained, newBalance)
             }
 
             this.bot.logger.info(
@@ -764,6 +799,11 @@ export class Workers {
                             'ACTIVITY',
                             `Skipped activity "${activity.title}" | offerId=${offerId} | Reason: Unsupported type "${activity.promotionType}"`
                         )
+                        this.skippedTypes.push({
+                            type: activity.promotionType ?? 'unknown',
+                            title: activity.title ?? '',
+                            points: activity.pointProgressMax ?? 0
+                        })
                         break
                     }
                 }
@@ -777,6 +817,37 @@ export class Workers {
                 )
             }
         }
+    }
+
+    /** One line per run listing activity types this build cannot claim yet. */
+    public reportSkippedTypes(): void {
+        if (!this.skippedTypes.length) return
+
+        const byType = new Map<string, { count: number; points: number; example: string }>()
+        for (const item of this.skippedTypes) {
+            const entry = byType.get(item.type) ?? { count: 0, points: 0, example: item.title }
+            entry.count++
+            entry.points += item.points
+            byType.set(item.type, entry)
+        }
+
+        const claimable = [...byType.entries()].filter(([, entry]) => entry.points > 0)
+        const summary = [...byType.entries()]
+            .map(([type, entry]) => `${type} x${entry.count} (${entry.points}pts, e.g. "${entry.example}")`)
+            .join(' | ')
+
+        const message = `Unsupported activity types this run | ${summary}`
+        if (claimable.length) {
+            this.bot.logger.warn(
+                this.bot.isMobile,
+                'ACTIVITY-GAPS',
+                `${message} - these award points and are not claimed by any current mechanism`
+            )
+        } else {
+            this.bot.logger.info(this.bot.isMobile, 'ACTIVITY-GAPS', message)
+        }
+
+        this.skippedTypes = []
     }
 
     // Util

@@ -107,3 +107,12 @@ export function formatRunSummary(rows: AccountSummary[], totalRuntimeSeconds: nu
 
     return [title, header, ...body, separator, totalRow].join('\n')
 }
+
+/** Breakdown line for the run summary: `search 120 | quiz 20 | linkOffers 30`. */
+export function formatPointsBySource(points: Record<string, number>): string {
+    const entries = Object.entries(points)
+        .filter(([, value]) => value > 0)
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    if (!entries.length) return 'none'
+    return entries.map(([source, value]) => `${source} ${value}`).join(' | ')
+}

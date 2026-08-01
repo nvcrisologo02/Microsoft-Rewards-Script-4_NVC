@@ -13,12 +13,15 @@ export interface ReportOutcome {
 /**
  * Reports a dashboard promotion via the "reportActivity" server action and
  * verifies the points delta. Throws if the action id was not discovered;
- * callers handle skip logging and retries.
+ * callers handle skip logging and retries. `source` attributes the credit to
+ * the mechanism that triggered the report, since several of them share this
+ * server action.
  */
 export async function reportOfferActivity(
     bot: MicrosoftRewardsBot,
     live: ParsedOffer,
-    promotion: Pick<BasePromotion, 'offerId'> & Partial<Pick<BasePromotion, 'activityType'>>
+    promotion: Pick<BasePromotion, 'offerId'> & Partial<Pick<BasePromotion, 'activityType'>>,
+    source = 'activity'
 ): Promise<ReportOutcome> {
     const actionId = bot.nextActions.reportActivity
     if (!actionId) {
@@ -53,8 +56,7 @@ export async function reportOfferActivity(
     const newBalance = await bot.browser.func.getCurrentPoints()
     const gained = newBalance - oldBalance
     if (gained > 0) {
-        bot.userData.currentPoints = newBalance
-        bot.userData.gainedPoints = (bot.userData.gainedPoints ?? 0) + gained
+        bot.creditPoints(source, gained, newBalance)
     }
 
     return { status, acknowledged, gained, newBalance }

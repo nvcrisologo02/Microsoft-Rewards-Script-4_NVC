@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import cluster from 'cluster'
+import path from 'path'
 import type { BrowserContext, Cookie, Page } from 'patchright'
 import pkg from '../package.json'
 
@@ -17,7 +18,8 @@ import { loadAccounts, loadConfig } from './util/Load'
 import { clearStorageState, closeSessionStore } from './util/SessionStore'
 import { checkNodeVersion } from './util/Validator'
 import { runScheduled } from './util/Scheduler'
-import { formatRunSummary } from './util/RunSummary'
+import { formatRunSummary, formatPointsBySource } from './util/RunSummary'
+import { EarningsHistory, ZERO_STREAK_ALERT_THRESHOLD } from './util/EarningsHistory'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -91,6 +93,18 @@ export class MicrosoftRewardsBot {
     public mainDesktopPage!: Page
 
     public userData: UserData
+    public pointsBySource: Record<string, number> = {}
+
+    /**
+     * Records a credit and attributes it to the mechanism that earned it, so a
+     * run summary can show which channel is (or is no longer) producing points.
+     */
+    public creditPoints(source: string, amount: number, newBalance?: number): void {
+        if (!Number.isFinite(amount) || amount <= 0) return
+        if (typeof newBalance === 'number') this.userData.currentPoints = newBalance
+        this.userData.gainedPoints = (this.userData.gainedPoints ?? 0) + amount
+        this.pointsBySource[source] = (this.pointsBySource[source] ?? 0) + amount
+    }
 
     public nextActions: Record<string, string> = {}
     public nextRouterStateTree = ''
@@ -715,6 +729,9 @@ export class MicrosoftRewardsBot {
 
                 this.userData.initialPoints = data.dashboard.userStatus.availablePoints
                 this.userData.currentPoints = data.dashboard.userStatus.availablePoints
+                this.userData.gainedPoints = 0
+                this.pointsBySource = {}
+                this.workers.clearSkippedTypes()
                 const initialPoints = this.userData.initialPoints ?? 0
 
                 const browserEarnable = await this.browser.func.getBrowserEarnablePoints()
@@ -879,8 +896,31 @@ export class MicrosoftRewardsBot {
                 this.logger.info(
                     'main',
                     'FLOW',
-                    `Points collected | pointsGained=${collectedPoints} | currentBalance=${finalPoints} | account=${accountEmail}`
+                    `Points collected | pointsGained=${collectedPoints} | currentBalance=${finalPoints} | account=${accountEmail} | bySource=${formatPointsBySource(this.pointsBySource)}`
                 )
+
+                try {
+                    const earnings = new EarningsHistory(
+                        path.join(path.resolve(process.cwd(), this.config.sessionPath), 'earnings-history')
+                    )
+                    earnings.record(accountEmail, collectedPoints)
+                    const zeroStreak = earnings.zeroStreak(accountEmail)
+                    if (zeroStreak >= ZERO_STREAK_ALERT_THRESHOLD) {
+                        this.logger.warn(
+                            'main',
+                            'EARNINGS-ALERT',
+                            `${accountEmail} has earned no points for ${zeroStreak} consecutive runs - a claiming mechanism may have broken (check QUIZ / LINK-OFFERS / SEARCH log lines)`
+                        )
+                    }
+                } catch (error) {
+                    this.logger.debug('main', 'EARNINGS-ALERT', `Failed to update earnings history: ${error}`)
+                }
+
+                try {
+                    this.workers.reportSkippedTypes()
+                } catch (error) {
+                    this.logger.debug('main', 'ACTIVITY-GAPS', `Failed to report skipped activity types: ${error}`)
+                }
 
                 return {
                     initialPoints,

@@ -62,6 +62,11 @@ fi
 #                               generated); CONFIG_* overrides always applied
 #      - Schema drift         → warn with list of missing keys in both cases;
 #                               never auto-modify the file
+#      - Default-value drift  → warn when a shipped default changed (tracked
+#                               via config/.config.example.snapshot.json) and
+#                               config.json still holds the old value; a
+#                               value the user deliberately customised stays
+#                               silent; never auto-modify the file
 #
 #    headless is always forced true - it is not optional in Docker.
 #
@@ -112,6 +117,7 @@ fi
 #      CONFIG_ACTIVITY_URL_REWARD        → .activities.urlReward
 #      CONFIG_ACTIVITY_SEARCH_ON_BING    → .activities.searchOnBing
 #      CONFIG_ACTIVITY_QUIZ              → .activities.quiz
+#      CONFIG_ACTIVITY_LINK_OFFERS       → .activities.linkOffers
 #
 #    Experimental:
 #      CONFIG_EXPERIMENTAL_API_SEARCH         → .experimental.apiSearch
@@ -141,6 +147,7 @@ fi
 #
 CONFIG_FILE="$SCRIPT_DIR/config/config.json"
 CONFIG_EXAMPLE="$SCRIPT_DIR/config.example.json"
+CONFIG_EXAMPLE_SNAPSHOT="$SCRIPT_DIR/config/.config.example.snapshot.json"
 
 # Returns 0 if config.json exists and is a valid JSON object
 _config_file_is_valid() {
@@ -155,6 +162,51 @@ _find_new_keys() {
   config_keys=$(jq -r "$jq_expr" "$CONFIG_FILE" 2>/dev/null)
   example_keys=$(jq -r "$jq_expr" "$CONFIG_EXAMPLE" 2>/dev/null)
   comm -13 <(echo "$config_keys") <(echo "$example_keys")
+}
+
+# Returns "path: old -> new" lines for shipped defaults that changed since the
+# last startup AND that the user's config.json still holds at the old value
+# (i.e. they never picked up the change). Values the user deliberately
+# customised differ from both snapshot and example, so they stay silent.
+#
+# First run (no snapshot yet): establishes the baseline and reports nothing.
+# Tolerant of missing jq / unreadable / malformed files - always safe to call.
+_find_default_drift() {
+  if [ ! -f "$CONFIG_EXAMPLE_SNAPSHOT" ]; then
+    cp "$CONFIG_EXAMPLE" "$CONFIG_EXAMPLE_SNAPSHOT" 2>/dev/null
+    return 0
+  fi
+
+  jq -e 'type == "object"' "$CONFIG_EXAMPLE_SNAPSHOT" > /dev/null 2>&1 || return 0
+
+  local leaf_expr old_paths new_paths common_paths
+  # Leaf paths: object-key paths (no array indices) whose value is not itself
+  # an object - i.e. scalars and arrays, compared whole as JSON.
+  leaf_expr='[path(..) as $p | select(getpath($p) | type != "object") | select($p | all(.; type == "string")) | $p | join(".")] | sort[]'
+  old_paths=$(jq -r "$leaf_expr" "$CONFIG_EXAMPLE_SNAPSHOT" 2>/dev/null) || return 0
+  new_paths=$(jq -r "$leaf_expr" "$CONFIG_EXAMPLE" 2>/dev/null) || return 0
+  # Only paths present in both snapshots are "changed defaults" - a path
+  # that's new in the example is a missing-key case, already covered above.
+  common_paths=$(comm -12 <(echo "$old_paths") <(echo "$new_paths")) || return 0
+
+  local path old_val new_val user_val report=""
+  while IFS= read -r path; do
+    [ -z "$path" ] && continue
+    old_val=$(jq -c --arg p "$path" 'getpath($p | split("."))' "$CONFIG_EXAMPLE_SNAPSHOT" 2>/dev/null) || continue
+    new_val=$(jq -c --arg p "$path" 'getpath($p | split("."))' "$CONFIG_EXAMPLE" 2>/dev/null) || continue
+    [ "$old_val" = "$new_val" ] && continue
+
+    user_val=$(jq -c --arg p "$path" 'getpath($p | split("."))' "$CONFIG_FILE" 2>/dev/null) || continue
+    [ "$user_val" = "$old_val" ] || continue
+
+    report="${report}${path}: ${old_val} -> ${new_val}"$'\n'
+  done <<< "$common_paths"
+
+  # Refresh the baseline so each drifted default is only ever reported once.
+  cp "$CONFIG_EXAMPLE" "$CONFIG_EXAMPLE_SNAPSHOT" 2>/dev/null
+
+  printf '%s' "$report"
+  return 0
 }
 
 if ! [ -f "$CONFIG_EXAMPLE" ]; then
@@ -192,6 +244,25 @@ if _config_file_is_valid; then
     echo "│  To fix: delete config.json (or empty it) and restart - │" >&2
     echo "│  it will be regenerated with all current defaults,      │" >&2
     echo "│  then re-apply your CONFIG_* env vars.                  │" >&2
+    echo "└─────────────────────────────────────────────────────────┘" >&2
+    echo "" >&2
+  fi
+
+  drift=$(_find_default_drift)
+  if [ -n "$drift" ]; then
+    echo "" >&2
+    echo "┌─────────────────────────────────────────────────────────┐" >&2
+    printf "│    %-55s│\n" "⚠  CONFIG DEFAULTS CHANGED" >&2
+    echo "│                                                         │" >&2
+    printf "│    %-55s│\n" "A shipped default changed in a recent update, but" >&2
+    printf "│    %-55s│\n" "your config.json still has the old value:" >&2
+    echo "│                                                         │" >&2
+    echo "$drift" | while IFS= read -r line; do
+      printf "│    %-55s│\n" "$line" >&2
+    done
+    echo "│                                                         │" >&2
+    printf "│    %-55s│\n" "To fix: edit config/config.json (or set the matching" >&2
+    printf "│    %-55s│\n" "CONFIG_* env var) to pick up the new default." >&2
     echo "└─────────────────────────────────────────────────────────┘" >&2
     echo "" >&2
   fi
@@ -318,6 +389,7 @@ _cfg "${CONFIG_SEARCH_ON_BING_LOCAL:-}"    '.searchOnBingLocalQueries'          
 _cfg "${CONFIG_ACTIVITY_URL_REWARD:-}"     '.activities.urlReward'                  bool
 _cfg "${CONFIG_ACTIVITY_SEARCH_ON_BING:-}" '.activities.searchOnBing'               bool
 _cfg "${CONFIG_ACTIVITY_QUIZ:-}"           '.activities.quiz'                       bool
+_cfg "${CONFIG_ACTIVITY_LINK_OFFERS:-}"    '.activities.linkOffers'                 bool
 
 # Experimental
 _cfg "${CONFIG_EXPERIMENTAL_API_SEARCH:-}"         '.experimental.apiSearch'         bool

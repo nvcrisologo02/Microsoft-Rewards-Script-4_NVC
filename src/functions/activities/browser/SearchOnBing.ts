@@ -90,10 +90,11 @@ export class SearchOnBing extends Workers {
 
                 const delta = newBalance - lastBalance
                 if (delta > 0) {
-                    this.bot.userData.gainedPoints = (this.bot.userData.gainedPoints ?? 0) + delta
+                    this.bot.creditPoints('searchOnBing', delta, newBalance)
                     lastBalance = newBalance
+                } else {
+                    this.bot.userData.currentPoints = newBalance
                 }
-                this.bot.userData.currentPoints = newBalance
                 this.gainedPoints = newBalance - this.oldBalance
 
                 const offerProgress = offer ? `${offer.pointProgress}/${offer.pointProgressMax}` : 'unknown'
