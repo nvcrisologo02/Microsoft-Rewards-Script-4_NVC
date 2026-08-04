@@ -13,6 +13,8 @@ import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
 import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
 import { resolveRunCommand } from './runCommand.js'
+import { resolveStartSelection } from './startSelection.js'
+import { RerunController } from './rerunController.js'
 import { log, parseArgs, getProjectRoot, loadEnvFile, loadConfigSafe, redactSecrets, envStr, envBool } from './lib.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -110,6 +112,16 @@ pm.on('run-complete', entry => {
     }
 })
 
+// Chains extra passes after a run so points that credit late - Bing daily
+// offers in particular - get picked up without a manual run.
+const rerunController = new RerunController({
+    pm,
+    projectRoot,
+    readSchedule,
+    loadAccounts,
+    buildExcludedEnv: buildExcludedAccountsEnv
+}).attach()
+
 function toHistoryRecord(entry) {
     return {
         startedAt: entry.startedAt,
@@ -126,6 +138,21 @@ function toHistoryRecord(entry) {
             streakProtection: a.streakProtection ?? null
         }))
     }
+}
+
+function startSelectionFor(body) {
+    return resolveStartSelection(body, {
+        readSchedule,
+        projectRoot,
+        buildSingleEnv: buildSingleAccountEnv,
+        buildExcludedEnv: buildExcludedAccountsEnv
+    })
+}
+
+function selectionErrorStatus(code) {
+    if (code === 'BAD_REQUEST') return 400
+    if (code === 'ALL_PAUSED') return 409
+    return 500
 }
 
 function applyCors(res) {
@@ -605,8 +632,6 @@ const requestHandler = async (req, res) => {
         if (method === 'POST' && pathname === '/start') {
             const body = await readJsonObject(req)
             const overrides = {}
-            let selectedAccount = null
-            let excludedAccounts = []
             if (body.args != null) overrides.args = body.args
             if (body.env != null) {
                 if (!ALLOW_ENV_OVERRIDES) {
@@ -617,26 +642,21 @@ const requestHandler = async (req, res) => {
                 overrides.env = body.env
             }
             try {
-                if (body.accountIndex != null && body.excludedAccountIndexes != null) {
-                    return sendJson(res, 400, {
-                        error: '`accountIndex` and `excludedAccountIndexes` cannot be used together.',
-                        code: 'BAD_REQUEST'
-                    })
-                }
-                if (body.accountIndex != null) {
-                    const selection = buildSingleAccountEnv(body.accountIndex)
+                const selection = startSelectionFor(body)
+                if (Object.keys(selection.env).length) {
                     overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    selectedAccount = selection.account
-                } else if (body.excludedAccountIndexes != null) {
-                    const selection = buildExcludedAccountsEnv(body.excludedAccountIndexes)
-                    overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    excludedAccounts = selection.excludedAccounts
                 }
+                rerunController.noteExternalStart()
                 const info = pm.start(overrides)
-                return sendJson(res, 202, { started: true, selectedAccount, excludedAccounts, ...info })
+                return sendJson(res, 202, {
+                    started: true,
+                    selectedAccount: selection.selectedAccount,
+                    excludedAccounts: selection.excludedAccounts,
+                    ...info
+                })
             } catch (err) {
                 if (err.code === 'ALREADY_RUNNING') return sendJson(res, 409, { error: err.message, code: err.code })
-                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code) return sendJson(res, selectionErrorStatus(err.code), { error: err.message, code: err.code })
                 return sendJson(res, 500, { error: err.message })
             }
         }
@@ -659,8 +679,6 @@ const requestHandler = async (req, res) => {
         if (method === 'POST' && pathname === '/restart') {
             const body = await readJsonObject(req)
             const overrides = { force: readForce(body) }
-            let selectedAccount = null
-            let excludedAccounts = []
             if (body.args != null) overrides.args = body.args
             if (body.env != null) {
                 if (!ALLOW_ENV_OVERRIDES) {
@@ -671,25 +689,20 @@ const requestHandler = async (req, res) => {
                 overrides.env = body.env
             }
             try {
-                if (body.accountIndex != null && body.excludedAccountIndexes != null) {
-                    return sendJson(res, 400, {
-                        error: '`accountIndex` and `excludedAccountIndexes` cannot be used together.',
-                        code: 'BAD_REQUEST'
-                    })
-                }
-                if (body.accountIndex != null) {
-                    const selection = buildSingleAccountEnv(body.accountIndex)
+                const selection = startSelectionFor(body)
+                if (Object.keys(selection.env).length) {
                     overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    selectedAccount = selection.account
-                } else if (body.excludedAccountIndexes != null) {
-                    const selection = buildExcludedAccountsEnv(body.excludedAccountIndexes)
-                    overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    excludedAccounts = selection.excludedAccounts
                 }
+                rerunController.noteExternalStart()
                 const info = await pm.restart(overrides)
-                return sendJson(res, 202, { restarted: true, selectedAccount, excludedAccounts, ...info })
+                return sendJson(res, 202, {
+                    restarted: true,
+                    selectedAccount: selection.selectedAccount,
+                    excludedAccounts: selection.excludedAccounts,
+                    ...info
+                })
             } catch (err) {
-                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code) return sendJson(res, selectionErrorStatus(err.code), { error: err.message, code: err.code })
                 return sendJson(res, 500, { error: err.message })
             }
         }
