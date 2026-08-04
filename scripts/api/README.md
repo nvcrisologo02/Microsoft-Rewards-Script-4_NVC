@@ -423,6 +423,7 @@ server itself remains dependency-free.
 | `POST`   | `/start`           | Start a bot run.                                                                                                                |
 | `POST`   | `/stop`            | Request graceful or forced process termination.                                                                                 |
 | `POST`   | `/restart`         | Stop an active run, then start a new one.                                                                                       |
+| `POST`   | `/rerun/cancel`    | Cancel a pending automatic rerun pass without touching any running process.                                                      |
 | `POST`   | `/shutdown`        | Stop the bot if needed and terminate the API process.                                                                           |
 | `DELETE` | `/sessions/:email` | Delete only one account's mobile and desktop sessions.                                                                          |
 | `POST`   | `/accounts`        | Create a new account slot. Writes are atomic with a `.env.bak` backup. Requires `API_ALLOW_ACCOUNT_WRITE=true` and an idle bot. |
@@ -1125,6 +1126,36 @@ Supported body fields:
 
 `accountIndex` and `excludedAccountIndexes` are mutually exclusive.
 
+#### Paused accounts
+
+A request that supplies **neither** selection field runs every account that is
+not paused, rather than every account outright. Paused accounts are the
+`excludedAccountIndexes` persisted in `config/schedule.json` — the same list the
+dashboard's *Cuentas pausadas* chips and the per-account toggle in the Cuentas
+view edit.
+
+Explicit selections override the pause:
+
+- `excludedAccountIndexes: []` sent deliberately runs every account.
+- `accountIndex: <N>` runs that account even when it is paused, since naming a
+  slot is a deliberate act.
+
+If every configured account is paused, an implicit start returns:
+
+```http
+HTTP/1.1 409 Conflict
+```
+
+```json
+{
+    "error": "Every configured account is paused. Resume at least one, or name one explicitly.",
+    "code": "ALL_PAUSED"
+}
+```
+
+A corrupt `schedule.json` makes an implicit start fail with `500` and
+`code: "CORRUPT_SCHEDULE"` rather than silently running the paused accounts.
+
 #### Start all configured accounts
 
 **cURL**
@@ -1313,9 +1344,59 @@ HTTP/1.1 409 Conflict
 }
 ```
 
+### Automatic rerun passes
+
+Some credits arrive asynchronously — Bing daily offers in particular can land
+half a minute after the account has already been closed — so a single pass
+regularly leaves points behind. After a run finishes, the API waits
+`delayMinutes` and starts another pass containing only the accounts that gained
+points or failed, up to `maxPasses` **total** passes counting the initial run.
+The chain ends as soon as a pass leaves nothing pending. A run stopped by hand
+never chains.
+
+While a pass is pending, `GET /status` reports `state: "cooldown"` and a `rerun`
+block:
+
+```json
+{
+    "state": "cooldown",
+    "rerun": {
+        "pending": true,
+        "pass": 1,
+        "maxPasses": 3,
+        "nextPassAt": "2026-08-05T09:35:00.000Z",
+        "accountIndexes": [1, 3]
+    }
+}
+```
+
+`cooldown` matters for anything that waits on a run: treating it as `idle` would
+declare the chain finished while a pass is still queued. `scripts/api/trigger.js`
+keeps polling through it, so cron's lockfile stays held for the whole chain.
+
+Configured in `config/schedule.json`:
+
+```json
+"autoRerun": { "enabled": true, "delayMinutes": 5, "maxPasses": 3 }
+```
+
+with defaults from `AUTO_RERUN`, `AUTO_RERUN_DELAY_MINUTES` and
+`AUTO_RERUN_MAX_PASSES` when the file carries no `autoRerun` block.
+`delayMinutes` accepts 1–120 and `maxPasses` 1–10; `maxPasses: 1` disables
+reruns. Each pass runs as its own child process with `RERUN_PASS=<n>` in its
+environment, appears as a separate run in `/history`, and the bot echoes the
+marker into its `RUN-START` line.
+
+### `POST /rerun/cancel`
+
+Cancels the pending rerun pass without touching any running process. Returns
+`202` with `{"cancelled": true}` when a pass was pending, and `409` with
+`code: "NOT_PENDING"` when there was nothing to cancel.
+
 ### `POST /stop`
 
-Requests termination of the active bot process.
+Requests termination of the active bot process. Also cancels the rerun chain, so
+a stopped run never schedules another pass.
 
 Graceful stop:
 

@@ -241,6 +241,22 @@ Two log tags help spot when Rewards changes something under you:
 
 The per-account "Points collected" line also carries a `bySource=` breakdown (e.g. `search 120 | quiz 20 | linkOffers 30`) so you can see at a glance which mechanism produced the points - and which stopped.
 
+### Automatic rerun passes
+
+Some credits arrive asynchronously — Bing daily offers in particular can land half a minute after the account has already been closed — so a single pass regularly leaves points behind. When running with `API_MODE=true`, the control API chains extra passes: once a run finishes it waits `delayMinutes`, then runs again with only the accounts that gained points or failed, up to `maxPasses` **total** passes counting the initial run. The chain ends as soon as a pass leaves nothing pending. A run stopped by hand never chains.
+
+Configured under `autoRerun` in `config/schedule.json`, or via the `AUTO_RERUN`, `AUTO_RERUN_DELAY_MINUTES` and `AUTO_RERUN_MAX_PASSES` environment variables:
+
+```json
+"autoRerun": { "enabled": true, "delayMinutes": 5, "maxPasses": 3 }
+```
+
+Each pass is a separate run in the history and carries `RERUN_PASS` in its environment, which the bot echoes into its `RUN-START` line and into the summary email subject. While a pass is pending, the API reports `state: "cooldown"` — see [the API README](scripts/api/README.md) for the full contract.
+
+### Pausing an account
+
+`excludedAccountIndexes` in `config/schedule.json` — the *Cuentas pausadas* chips in the dashboard's Programación view, or the per-account toggle in Cuentas — keeps an account out of every run: cron, the dashboard's start button and the automatic rerun passes alike. Starting a run with an explicit `accountIndex` still runs that account, since naming a slot is a deliberate override.
+
 ## Configuration Options
 
 Edit `config.json` to customize behavior, or set `CONFIG_*` environment variables in `compose.yaml` (Docker). Below are all currently available options.
