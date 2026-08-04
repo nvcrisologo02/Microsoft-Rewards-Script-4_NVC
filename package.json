@@ -22,7 +22,9 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "clear-diagnostics": "rimraf diagnostics",
-        "test": "node --require ts-node/register --test \"src/util/*.test.ts\" \"src/functions/*.test.ts\" \"src/browser/*.test.ts\"",
+        "test:unit": "node --require ts-node/register --test \"src/util/*.test.ts\" \"src/functions/*.test.ts\" \"src/browser/*.test.ts\"",
+    "test:api": "node --test \"scripts/api/**/*.test.js\"",
+    "test": "npm run test:unit && npm run test:api",
         "clear-sessions": "node ./scripts/main/clearSessions.js",
         "open-session": "node ./scripts/main/browserSession.js -email"
     },
