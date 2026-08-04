@@ -114,6 +114,13 @@ while (Date.now() < deadline) {
     await sleep(POLL_MS)
     try {
         const { body: s } = await request('GET', '/status')
+        // `cooldown` means an automatic rerun pass is pending: the chain has not
+        // finished, and returning now would release cron's lockfile too early.
+        if (s?.state === 'cooldown') {
+            const at = s.rerun?.nextPassAt ? ` (next pass at ${s.rerun.nextPassAt})` : ''
+            console.log(`[trigger] Waiting for the scheduled rerun pass${at}…`)
+            continue
+        }
         if (s?.state === 'idle') {
             const exit = s.lastExit
             if (exit?.code === 0 && !exit?.signal && !exit?.error) {

@@ -155,6 +155,21 @@ function selectionErrorStatus(code) {
     return 500
 }
 
+/**
+ * The published status merges the child-process state with the rerun chain.
+ * During the cooldown no child exists, so a bare `idle` would tell trigger.js
+ * the run had finished - releasing cron's lockfile mid-chain.
+ */
+function composeStatus() {
+    const status = pm.getStatus()
+    const rerun = rerunController.getState()
+    return {
+        ...status,
+        state: status.state === 'idle' && rerun.pending ? 'cooldown' : status.state,
+        rerun
+    }
+}
+
 function applyCors(res) {
     res.setHeader('Access-Control-Allow-Origin', CORS_ORIGIN)
     res.setHeader('Vary', 'Origin')
@@ -257,7 +272,7 @@ function handleEventStream(req, res, url) {
         write(frame)
     }
 
-    sendEvent('hello', pm.getStatus())
+    sendEvent('hello', composeStatus())
 
     const lastEventId = Number(req.headers['last-event-id'])
     if (Number.isFinite(lastEventId) && lastEventId > 0) {
@@ -274,9 +289,14 @@ function handleEventStream(req, res, url) {
     }
 
     const onLog = entry => sendEvent('log', entry, entry.id)
-    const onStatus = status => sendEvent('status', status)
+    // Both listeners publish the composed status: a rerun `change` is the only
+    // thing that moves the state in or out of `cooldown`, and the process
+    // manager knows nothing about it.
+    const onStatus = () => sendEvent('status', composeStatus())
+    const onRerunChange = () => sendEvent('status', composeStatus())
     pm.on('log', onLog)
     pm.on('status', onStatus)
+    rerunController.on('change', onRerunChange)
 
     const keepAlive = setInterval(() => write(': ping\n\n'), 15000)
     if (typeof keepAlive.unref === 'function') keepAlive.unref()
@@ -285,6 +305,7 @@ function handleEventStream(req, res, url) {
         clearInterval(keepAlive)
         pm.off('log', onLog)
         pm.off('status', onStatus)
+        rerunController.off('change', onRerunChange)
         if (!res.writableEnded) res.end()
     }
     req.on('close', cleanup)
@@ -351,6 +372,7 @@ const requestHandler = async (req, res) => {
                     'POST /start',
                     'POST /stop',
                     'POST /restart',
+                    'POST /rerun/cancel',
                     'POST /shutdown',
                     'DELETE /sessions/:email',
                     'PUT|PATCH /config',
@@ -373,7 +395,7 @@ const requestHandler = async (req, res) => {
 
         // status
         if (method === 'GET' && pathname === '/status') {
-            return sendJson(res, 200, pm.getStatus())
+            return sendJson(res, 200, composeStatus())
         }
 
         // point read live
@@ -661,11 +683,26 @@ const requestHandler = async (req, res) => {
             }
         }
 
+        // cancel a pending rerun pass without touching any running process
+        if (method === 'POST' && pathname === '/rerun/cancel') {
+            const pending = rerunController.getState().pending
+            rerunController.cancel('cancelled from the dashboard')
+            return sendJson(res, pending ? 202 : 409, {
+                cancelled: pending,
+                ...(pending ? {} : { error: 'No rerun pass is pending.', code: 'NOT_PENDING' })
+            })
+        }
+
         // kill proc
         if (method === 'POST' && pathname === '/stop') {
             const body = await readJsonObject(req)
             const force = readForce(body)
             try {
+                // Mark the chain dead before signalling: this - not the exit code -
+                // is what tells the controller a human stopped the run. On Windows
+                // the tree is killed with taskkill, whose exit code is
+                // indistinguishable from a crash.
+                rerunController.cancel('stop requested')
                 const stopping = pm.stop({ force })
                 stopping.catch(() => {})
                 return sendJson(res, 202, { stopping: true, force })
@@ -887,6 +924,7 @@ async function shutdown(signal, { force = false } = {}) {
     if (shuttingDown) return
     shuttingDown = true
     log('INFO', `${signal} received - shutting down.`)
+    rerunController.cancel('shutting down')
     server.close()
     try {
         if (pm.getStatus().state !== 'idle') {
