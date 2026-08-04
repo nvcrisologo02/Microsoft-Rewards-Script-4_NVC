@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 
-import { decideNextPass } from './rerunController.js'
+import { decideNextPass, RerunController } from './rerunController.js'
 
 const KNOWN = [
     { index: 1, email: 'uno@example.com' },
@@ -126,4 +127,187 @@ test('the delay follows autoRerun.delayMinutes', () => {
         autoRerun: { ...AUTO_RERUN, delayMinutes: 12 }
     })
     assert.equal(result.delayMs, 12 * 60_000)
+})
+
+class FakePm extends EventEmitter {
+    constructor() {
+        super()
+        this.starts = []
+        this.notes = []
+        this.startError = null
+    }
+    start(overrides) {
+        if (this.startError) throw this.startError
+        this.starts.push(overrides)
+        return { pid: 1234 }
+    }
+    note(level, message) {
+        this.notes.push({ level, message })
+    }
+}
+
+function makeHarness({ schedule, accounts = KNOWN, scheduleError = null } = {}) {
+    const pm = new FakePm()
+    const timers = []
+    const controller = new RerunController({
+        pm,
+        projectRoot: '/tmp/fake',
+        readSchedule: () => {
+            if (scheduleError) throw scheduleError
+            return {
+                excludedAccountIndexes: [],
+                autoRerun: AUTO_RERUN,
+                ...schedule
+            }
+        },
+        loadAccounts: () => accounts,
+        buildExcludedEnv: excluded => ({
+            env: { EXCLUDED: excluded.join(',') },
+            includedAccounts: accounts.filter(a => !excluded.includes(a.index)),
+            excludedAccounts: accounts.filter(a => excluded.includes(a.index))
+        }),
+        setTimer: (fn, ms) => {
+            const handle = { fn, ms, cleared: false }
+            timers.push(handle)
+            return handle
+        },
+        clearTimer: handle => {
+            if (handle) handle.cleared = true
+        }
+    }).attach()
+    return { pm, controller, timers, fire: () => timers.at(-1).fn() }
+}
+
+function completion(runAccounts) {
+    return { startedAt: 'x', endedAt: 'y', exit: { code: 0 }, run: { accounts: runAccounts } }
+}
+
+test('a completed run with pending accounts schedules the next pass', () => {
+    const { pm, controller, timers } = makeHarness()
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+
+    assert.equal(timers.length, 1)
+    assert.equal(timers[0].ms, 5 * 60_000)
+    assert.equal(controller.getState().pending, true)
+    assert.deepEqual(controller.getState().accountIndexes, [1])
+    assert.equal(pm.starts.length, 0, 'must not start before the cooldown elapses')
+})
+
+test('firing the timer starts the next pass with the other accounts excluded', () => {
+    const { pm, fire } = makeHarness()
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+    fire()
+
+    assert.equal(pm.starts.length, 1)
+    assert.equal(pm.starts[0].env.EXCLUDED, '2,3')
+    assert.equal(pm.starts[0].env.RERUN_PASS, '2')
+})
+
+test('the pass counter advances and stops at maxPasses', () => {
+    const { pm, controller, fire } = makeHarness()
+    const gained = completion([acc('uno@example.com', { collectedPoints: 30 })])
+
+    pm.emit('run-complete', gained)
+    fire()
+    assert.equal(pm.starts[0].env.RERUN_PASS, '2')
+
+    pm.emit('run-complete', gained)
+    fire()
+    assert.equal(pm.starts[1].env.RERUN_PASS, '3')
+
+    pm.emit('run-complete', gained)
+    assert.equal(pm.starts.length, 2, 'maxPasses of 3 allows no fourth pass')
+    assert.equal(controller.getState().pending, false)
+})
+
+test('a run killed by a signal is treated as stopped, not as a candidate', () => {
+    const { pm, controller, timers } = makeHarness()
+    pm.emit('run-complete', {
+        exit: { code: null, signal: 'SIGTERM' },
+        run: { accounts: [acc('uno@example.com', { collectedPoints: 30 })] }
+    })
+
+    assert.equal(timers.length, 0)
+    assert.equal(controller.getState().pending, false)
+})
+
+test('noteExternalStart resets the chain and clears any pending timer', () => {
+    const { pm, controller, timers } = makeHarness()
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+    assert.equal(controller.getState().pending, true)
+
+    controller.noteExternalStart()
+
+    assert.equal(timers[0].cleared, true)
+    assert.equal(controller.getState().pending, false)
+    assert.equal(controller.getState().pass, 1)
+})
+
+test('cancel stops the chain so the completing run schedules nothing', () => {
+    const { pm, controller, timers } = makeHarness()
+    controller.cancel('stopped by user')
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+
+    assert.equal(timers.length, 0)
+    assert.equal(controller.getState().pending, false)
+})
+
+test('a corrupt schedule cancels the chain rather than running paused accounts', () => {
+    const { pm, controller, timers } = makeHarness({
+        scheduleError: Object.assign(new Error('schedule.json is corrupt'), { code: 'CORRUPT_SCHEDULE' })
+    })
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+
+    assert.equal(timers.length, 0)
+    assert.equal(controller.getState().pending, false)
+    assert.match(pm.notes.at(-1).message, /corrupt/i)
+})
+
+test('an ALREADY_RUNNING start abandons the chain without throwing', () => {
+    const { pm, controller, fire } = makeHarness()
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+    pm.startError = Object.assign(new Error('Cannot start: a run is already running.'), { code: 'ALREADY_RUNNING' })
+
+    assert.doesNotThrow(() => fire())
+    assert.equal(controller.getState().pending, false)
+})
+
+test('change events fire when a pass is scheduled and when it is cancelled', () => {
+    const { pm, controller } = makeHarness()
+    let changes = 0
+    controller.on('change', () => changes++)
+
+    pm.emit('run-complete', completion([acc('uno@example.com', { collectedPoints: 30 })]))
+    assert.equal(changes, 1)
+
+    controller.noteExternalStart()
+    assert.equal(changes, 2)
+})
+
+test('the schedule is re-read at fire time so a mid-cooldown pause takes effect', () => {
+    const pm = new FakePm()
+    const timers = []
+    let excluded = []
+    new RerunController({
+        pm,
+        projectRoot: '/tmp/fake',
+        readSchedule: () => ({ excludedAccountIndexes: excluded, autoRerun: AUTO_RERUN }),
+        loadAccounts: () => KNOWN,
+        buildExcludedEnv: list => ({ env: { EXCLUDED: list.join(',') }, includedAccounts: [], excludedAccounts: [] }),
+        setTimer: (fn, ms) => {
+            const handle = { fn, ms }
+            timers.push(handle)
+            return handle
+        },
+        clearTimer: () => {}
+    }).attach()
+
+    pm.emit(
+        'run-complete',
+        completion([acc('uno@example.com', { collectedPoints: 30 }), acc('dos@example.com', { collectedPoints: 30 })])
+    )
+    excluded = [1]
+    timers.at(-1).fn()
+
+    assert.equal(pm.starts[0].env.EXCLUDED, '1,3', 'account 1 was paused during the cooldown')
 })
