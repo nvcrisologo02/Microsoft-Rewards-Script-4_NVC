@@ -131,7 +131,7 @@ export function Cuentas({ state }) {
     const [query, setQuery] = useState('')
     const [loadFailed, setLoadFailed] = useState(false)
     const [modal, setModal] = useState(null)
-    const busy = ['starting', 'running', 'stopping'].includes(state?.status?.state)
+    const busy = ['starting', 'running', 'stopping', 'cooldown'].includes(state?.status?.state)
 
     const load = () => {
         setLoadFailed(false)
@@ -143,6 +143,27 @@ export function Cuentas({ state }) {
         api('/sessions').then(d => setSessions(d.sessions ?? [])).catch(() => setSessions([]))
     }
     useEffect(load, [])
+
+    // Paused accounts live in schedule.json's excludedAccountIndexes - the same
+    // list the Programación view edits. One source of truth, two places to edit it.
+    const [paused, setPaused] = useState([])
+    useEffect(() => {
+        api('/schedule').then(s => setPaused(s.excludedAccountIndexes ?? [])).catch(() => setPaused([]))
+    }, [])
+
+    const togglePaused = async a => {
+        const next = paused.includes(a.index)
+            ? paused.filter(i => i !== a.index)
+            : [...paused, a.index].sort((x, y) => x - y)
+        try {
+            const updated = await api('/schedule', { method: 'PATCH', body: { excludedAccountIndexes: next } })
+            setPaused(updated.excludedAccountIndexes ?? next)
+            toast(next.includes(a.index) ? `${a.email} pausada` : `${a.email} reactivada`)
+        } catch (err) {
+            if (err instanceof ApiError && err.status === 403) toast('Escritura desactivada: pon API_ALLOW_SCHEDULE_WRITE=true y reinicia la API', 'err')
+            else toast(err instanceof ApiError ? err.message : 'Sin conexión con la API', 'err')
+        }
+    }
 
     const sessionsFor = email => {
         const mine = sessions.filter(s => s.email?.toLowerCase() === email.toLowerCase())
@@ -216,13 +237,18 @@ export function Cuentas({ state }) {
                 <button class="btn primary" onClick=${openNew}>+ Añadir cuenta</button>
             </div>
             <table>
-                <thead><tr><th>Cuenta</th><th>Región</th><th class="num">Puntos</th><th class="num">Recogido</th><th class="num">Racha</th>
+                <thead><tr><th>Cuenta</th><th>Estado</th><th>Región</th><th class="num">Puntos</th><th class="num">Recogido</th><th class="num">Racha</th>
                     <th>Sesiones</th><th>Último run</th><th></th></tr></thead>
                 <tbody>
                 ${list.map(a => {
                     const s = sessionsFor(a.email)
                     return html`<tr key=${a.index}>
                         <td class="em">${a.email}</td>
+                        <td><button class=${'fchip' + (paused.includes(a.index) ? ' on' : '')}
+                            title=${paused.includes(a.index)
+                                ? 'Pausada: no entra en los runs automáticos ni en las repescas'
+                                : 'Activa: entra en todos los runs'}
+                            onClick=${() => togglePaused(a)}>${paused.includes(a.index) ? '⏸ pausada' : '▶ activa'}</button></td>
                         <td>${a.geoLocale ?? '—'}</td>
                         <td class="num">${fmt(a.lastBalance)}</td>
                         <td class="num">${fmt(a.totalCollected)}</td>
@@ -233,7 +259,7 @@ export function Cuentas({ state }) {
                             : a.lastSuccess === false ? html`<span class="badge err">✕ ${a.lastError ?? 'falló'}</span>`
                             : html`<span class="badge mut">sin datos</span>`}</td>
                         <td class="acts">
-                            <button class="icon-btn" title="Ejecutar solo esta cuenta" disabled=${busy}
+                            <button class="icon-btn" title="Ejecutar solo esta cuenta (ignora la pausa)" disabled=${busy}
                                 onClick=${() => runOne(a)}>▶</button>
                             <button class="icon-btn" title="Editar cuenta" disabled=${busy} onClick=${() => openEdit(a)}>✎</button>
                             <button class="icon-btn danger" title="Eliminar cuenta de .env" disabled=${busy} onClick=${() => removeAccount(a)}>✕</button>

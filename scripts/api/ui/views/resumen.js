@@ -53,7 +53,10 @@ export function Resumen({ state }) {
         api('/errors?limit=8').then(d => setErrors(d.errors ?? [])).catch(() => {})
     }, [status?.latestLogId])
 
-    const busy = ['starting', 'running', 'stopping'].includes(status?.state)
+    // `cooldown` counts as busy - the chain hasn't finished - but there is no
+    // process to show progress for or to stop, only a pending pass to cancel.
+    const cooling = status?.state === 'cooldown'
+    const busy = ['starting', 'running', 'stopping', 'cooldown'].includes(status?.state)
     const accs = run?.accounts ?? []
     const okCount = accs.filter(a => a.success === true).length
     const failCount = accs.filter(a => a.success === false).length
@@ -67,7 +70,7 @@ export function Resumen({ state }) {
         <div class="grid-kpi">
             <div class="card kpi"><div class="lbl">Puntos esta sesión</div>
                 <div class="val">${run?.collected ? `+${fmt(run.collected)}` : '0'}</div>
-                <div class="d">${busy ? 'run en curso' : 'sin run activo'}</div></div>
+                <div class="d">${cooling ? 'repesca pendiente' : busy ? 'run en curso' : 'sin run activo'}</div></div>
             <div class="card kpi"><div class="lbl">Balance actual</div>
                 <div class="val">${fmt(live?.currentBalance)}</div>
                 <div class="d">${live?.currentAccount ?? 'cuenta activa'}</div></div>
@@ -85,7 +88,14 @@ export function Resumen({ state }) {
                     ${status?.startedAt && html`<span style="font:12px var(--mono);color:var(--ink-3)">
                         iniciado ${new Date(status.startedAt).toLocaleTimeString('es')}</span>`}
                 </div>
-                ${busy ? html`
+                ${cooling ? html`<p style="color:var(--ink-3);margin:0 0 6px">
+                    Repesca programada: pasada ${(status.rerun?.pass ?? 1) + 1} de ${status.rerun?.maxPasses ?? '—'}
+                    para ${status.rerun?.accountIndexes?.length ?? 0} cuenta(s)${
+                        status.rerun?.nextPassAt
+                            ? ` a las ${new Date(status.rerun.nextPassAt).toLocaleTimeString('es')}`
+                            : ''
+                    }.</p>`
+                : busy ? html`
                     <div class="row" style="margin-bottom:12px">
                         <span class="em">${live?.currentAccount ?? '…'}</span>
                         <div class="bar"><i style=${`width:${pct}%`}></i></div>
@@ -100,10 +110,12 @@ export function Resumen({ state }) {
                     No hay ningún run en marcha.${status?.lastExit ? ` Último proceso terminó con código ${status.lastExit.code}.` : ''}</p>`}
                 <div class="savebar">
                     <button class="btn" disabled=${busy} onClick=${() => setPicker(true)}>Solo una cuenta…</button>
-                    <button class="btn" disabled=${!busy} onClick=${() => {
+                    <button class="btn" disabled=${!busy || cooling} onClick=${() => {
                         if (confirm('¿Reiniciar el run actual?')) control('/restart', {}, 'Reinicio solicitado')
                     }}>Reiniciar</button>
-                    ${busy
+                    ${cooling
+                        ? html`<button class="btn danger" onClick=${() => control('/rerun/cancel', {}, 'Repesca cancelada')}>Cancelar repesca</button>`
+                        : busy
                         ? html`<button class="btn danger" onClick=${() => control('/stop', {}, 'Parada solicitada')}>Detener</button>`
                         : html`<button class="btn primary" onClick=${() => control('/start', {}, 'Run iniciado')}>Iniciar run</button>`}
                 </div>

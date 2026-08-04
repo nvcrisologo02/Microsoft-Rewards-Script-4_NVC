@@ -31,7 +31,12 @@ export function Programacion() {
                 enabled: Boolean(s.enabled),
                 cron: s.cron ?? '',
                 skipIfRunning: s.skipIfRunning !== false,
-                excludedAccountIndexes: s.excludedAccountIndexes ?? []
+                excludedAccountIndexes: s.excludedAccountIndexes ?? [],
+                autoRerun: {
+                    enabled: s.autoRerun?.enabled !== false,
+                    delayMinutes: s.autoRerun?.delayMinutes ?? 5,
+                    maxPasses: s.autoRerun?.maxPasses ?? 3
+                }
             })
         }).catch(() => toast('No se pudo cargar la programación', 'err'))
         api('/accounts').then(d => setAccounts(d.accounts ?? [])).catch(() => {})
@@ -119,7 +124,7 @@ export function Programacion() {
                 </div>
                 <div class="mt">
                     <div style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-3);margin-bottom:6px">
-                        Excluir cuentas del run programado</div>
+                        Cuentas pausadas (excluidas de todos los runs)</div>
                     <div class="chips">
                         ${accounts.length === 0 ? html`<span style="font-size:12.5px;color:var(--ink-3)">sin cuentas</span>` : ''}
                         ${accounts.map(a => html`<button key=${a.index} disabled=${!writable}
@@ -130,6 +135,32 @@ export function Programacion() {
                 <div class="savebar">
                     <button class="btn primary" disabled=${!writable || saving} onClick=${save}>Aplicar horario</button>
                 </div>
+            </div>
+            <div class="card">
+                <div class="row" style="justify-content:space-between">
+                    <b style="font-size:13.5px">Repesca automática</b>
+                    <label class="row" style="gap:6px;font-size:12.5px;color:var(--ink-2)">
+                        <input type="checkbox" checked=${draft.autoRerun.enabled} disabled=${!writable}
+                            onInput=${e => setField({ autoRerun: { ...draft.autoRerun, enabled: e.target.checked } })} /> activada
+                    </label>
+                </div>
+                <p style="font-size:12.5px;color:var(--ink-3);margin:8px 0 0">
+                    Al terminar un run se repiten las cuentas que ganaron puntos o fallaron, por si quedaron
+                    créditos pendientes de acreditar.</p>
+                <div class="row mt" style="gap:16px">
+                    <label style="font-size:12.5px;color:var(--ink-2)">Espera (min)
+                        <input type="number" min="1" max="120" style="width:70px;margin-left:8px" disabled=${!writable}
+                            value=${draft.autoRerun.delayMinutes}
+                            onInput=${e => setField({ autoRerun: { ...draft.autoRerun, delayMinutes: Number(e.target.value) } })} />
+                    </label>
+                    <label style="font-size:12.5px;color:var(--ink-2)">Pasadas totales
+                        <input type="number" min="1" max="10" style="width:70px;margin-left:8px" disabled=${!writable}
+                            value=${draft.autoRerun.maxPasses}
+                            onInput=${e => setField({ autoRerun: { ...draft.autoRerun, maxPasses: Number(e.target.value) } })} />
+                    </label>
+                </div>
+                <p style="font-size:11.5px;color:var(--ink-3);margin-top:10px">
+                    Incluye el run principal: 3 significa el run inicial más 2 repescas. 1 desactiva la repesca.</p>
             </div>
             <div class="card">
                 <b style="font-size:13.5px">Próximas 5 ejecuciones</b>
