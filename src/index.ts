@@ -268,6 +268,21 @@ export class MicrosoftRewardsBot {
         )
     }
 
+    /**
+     * The API server chains extra passes after a run to pick up points that
+     * credit late, and marks each one with RERUN_PASS. Surfacing it keeps the
+     * log and the summary emails distinguishable.
+     */
+    private rerunPassLabel(): string {
+        const pass = Number(process.env.RERUN_PASS)
+        return Number.isSafeInteger(pass) && pass > 1 ? ` | Pass: ${pass}` : ''
+    }
+
+    /** The same marker, worded for an email subject line. */
+    private rerunPassSubject(): string {
+        return this.rerunPassLabel().replace(' | Pass:', ' · repesca')
+    }
+
     async run(): Promise<void> {
         const totalAccounts = this.accounts.length
         const runStartTime = Date.now()
@@ -275,12 +290,14 @@ export class MicrosoftRewardsBot {
         this.logger.info(
             'main',
             'RUN-START',
-            `Starting Microsoft Rewards Script | v${pkg.version} | Accounts: ${totalAccounts} | Clusters: ${this.config.clusters}`
+            // The pass marker goes last on purpose: the dashboard's log parser
+            // matches this line by prefix, so nothing may be inserted mid-string.
+            `Starting Microsoft Rewards Script | v${pkg.version} | Accounts: ${totalAccounts} | Clusters: ${this.config.clusters}${this.rerunPassLabel()}`
         )
 
         if (emailEnabled()) {
             void sendEmail(
-                `Rewards: run iniciado (${totalAccounts} cuentas)`,
+                `Rewards: run iniciado (${totalAccounts} cuentas)${this.rerunPassSubject()}`,
                 `El bot de Microsoft Rewards ha arrancado.\n\n` +
                     `Cuentas: ${totalAccounts}\n` +
                     `Clusters: ${this.config.clusters}\n` +
@@ -345,7 +362,10 @@ export class MicrosoftRewardsBot {
             `Fin: ${new Date().toLocaleString('es-ES')}\n\n` +
             `Detalle por cuenta:\n${detail}\n`
 
-        await sendEmail(`Rewards: resumen ${okCount}/${stats.length} (+${totalCollected} pts)`, body)
+        await sendEmail(
+            `Rewards: resumen ${okCount}/${stats.length} (+${totalCollected} pts)${this.rerunPassSubject()}`,
+            body
+        )
     }
 
     private async runMaster(runStartTime: number): Promise<void> {

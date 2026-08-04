@@ -35,6 +35,14 @@ services:
             #API_ALLOW_ENV_OVERRIDES: 'true'
             #API_ALLOW_CONFIG_REVEAL: 'true'
             #API_ALLOW_CONFIG_WRITE: 'true'
+            # Repesca automática (solo con API_MODE=true). Tras cada run se repiten
+            # las cuentas que ganaron puntos o fallaron, por si quedaron créditos
+            # pendientes de acreditar. AUTO_RERUN_MAX_PASSES cuenta el run principal,
+            # así que 3 son el run inicial más 2 repescas. Son solo los valores por
+            # defecto: config/schedule.json manda si tiene el bloque autoRerun.
+            #AUTO_RERUN: 'true'
+            #AUTO_RERUN_DELAY_MINUTES: '5'
+            #AUTO_RERUN_MAX_PASSES: '3'
 
             #  ── Configuration ──────────────────────────────────────
             # Uncomment to override defaults, a full list of configuration options are in the README.

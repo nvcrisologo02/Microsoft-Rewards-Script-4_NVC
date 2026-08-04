@@ -13,6 +13,8 @@ import { deleteStoredSessions, listStoredSessions } from './sessionStore.js'
 import { AccountEditorError, accountDetail, upsertAccount, deleteAccount, refreshProcessEnv, readEnvAccounts } from './accountEditor.js'
 import { createUiHandler } from './staticServer.js'
 import { resolveRunCommand } from './runCommand.js'
+import { resolveStartSelection } from './startSelection.js'
+import { RerunController } from './rerunController.js'
 import { log, parseArgs, getProjectRoot, loadEnvFile, loadConfigSafe, redactSecrets, envStr, envBool } from './lib.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -110,6 +112,16 @@ pm.on('run-complete', entry => {
     }
 })
 
+// Chains extra passes after a run so points that credit late - Bing daily
+// offers in particular - get picked up without a manual run.
+const rerunController = new RerunController({
+    pm,
+    projectRoot,
+    readSchedule,
+    loadAccounts,
+    buildExcludedEnv: buildExcludedAccountsEnv
+}).attach()
+
 function toHistoryRecord(entry) {
     return {
         startedAt: entry.startedAt,
@@ -125,6 +137,36 @@ function toHistoryRecord(entry) {
             error: a.error,
             streakProtection: a.streakProtection ?? null
         }))
+    }
+}
+
+function startSelectionFor(body) {
+    return resolveStartSelection(body, {
+        readSchedule,
+        projectRoot,
+        buildSingleEnv: buildSingleAccountEnv,
+        buildExcludedEnv: buildExcludedAccountsEnv
+    })
+}
+
+function selectionErrorStatus(code) {
+    if (code === 'BAD_REQUEST') return 400
+    if (code === 'ALL_PAUSED') return 409
+    return 500
+}
+
+/**
+ * The published status merges the child-process state with the rerun chain.
+ * During the cooldown no child exists, so a bare `idle` would tell trigger.js
+ * the run had finished - releasing cron's lockfile mid-chain.
+ */
+function composeStatus() {
+    const status = pm.getStatus()
+    const rerun = rerunController.getState()
+    return {
+        ...status,
+        state: status.state === 'idle' && rerun.pending ? 'cooldown' : status.state,
+        rerun
     }
 }
 
@@ -230,7 +272,7 @@ function handleEventStream(req, res, url) {
         write(frame)
     }
 
-    sendEvent('hello', pm.getStatus())
+    sendEvent('hello', composeStatus())
 
     const lastEventId = Number(req.headers['last-event-id'])
     if (Number.isFinite(lastEventId) && lastEventId > 0) {
@@ -247,9 +289,14 @@ function handleEventStream(req, res, url) {
     }
 
     const onLog = entry => sendEvent('log', entry, entry.id)
-    const onStatus = status => sendEvent('status', status)
+    // Both listeners publish the composed status: a rerun `change` is the only
+    // thing that moves the state in or out of `cooldown`, and the process
+    // manager knows nothing about it.
+    const onStatus = () => sendEvent('status', composeStatus())
+    const onRerunChange = () => sendEvent('status', composeStatus())
     pm.on('log', onLog)
     pm.on('status', onStatus)
+    rerunController.on('change', onRerunChange)
 
     const keepAlive = setInterval(() => write(': ping\n\n'), 15000)
     if (typeof keepAlive.unref === 'function') keepAlive.unref()
@@ -258,6 +305,7 @@ function handleEventStream(req, res, url) {
         clearInterval(keepAlive)
         pm.off('log', onLog)
         pm.off('status', onStatus)
+        rerunController.off('change', onRerunChange)
         if (!res.writableEnded) res.end()
     }
     req.on('close', cleanup)
@@ -324,6 +372,7 @@ const requestHandler = async (req, res) => {
                     'POST /start',
                     'POST /stop',
                     'POST /restart',
+                    'POST /rerun/cancel',
                     'POST /shutdown',
                     'DELETE /sessions/:email',
                     'PUT|PATCH /config',
@@ -346,7 +395,7 @@ const requestHandler = async (req, res) => {
 
         // status
         if (method === 'GET' && pathname === '/status') {
-            return sendJson(res, 200, pm.getStatus())
+            return sendJson(res, 200, composeStatus())
         }
 
         // point read live
@@ -605,8 +654,6 @@ const requestHandler = async (req, res) => {
         if (method === 'POST' && pathname === '/start') {
             const body = await readJsonObject(req)
             const overrides = {}
-            let selectedAccount = null
-            let excludedAccounts = []
             if (body.args != null) overrides.args = body.args
             if (body.env != null) {
                 if (!ALLOW_ENV_OVERRIDES) {
@@ -617,28 +664,33 @@ const requestHandler = async (req, res) => {
                 overrides.env = body.env
             }
             try {
-                if (body.accountIndex != null && body.excludedAccountIndexes != null) {
-                    return sendJson(res, 400, {
-                        error: '`accountIndex` and `excludedAccountIndexes` cannot be used together.',
-                        code: 'BAD_REQUEST'
-                    })
-                }
-                if (body.accountIndex != null) {
-                    const selection = buildSingleAccountEnv(body.accountIndex)
+                const selection = startSelectionFor(body)
+                if (Object.keys(selection.env).length) {
                     overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    selectedAccount = selection.account
-                } else if (body.excludedAccountIndexes != null) {
-                    const selection = buildExcludedAccountsEnv(body.excludedAccountIndexes)
-                    overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    excludedAccounts = selection.excludedAccounts
                 }
+                rerunController.noteExternalStart()
                 const info = pm.start(overrides)
-                return sendJson(res, 202, { started: true, selectedAccount, excludedAccounts, ...info })
+                return sendJson(res, 202, {
+                    started: true,
+                    selectedAccount: selection.selectedAccount,
+                    excludedAccounts: selection.excludedAccounts,
+                    ...info
+                })
             } catch (err) {
                 if (err.code === 'ALREADY_RUNNING') return sendJson(res, 409, { error: err.message, code: err.code })
-                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code) return sendJson(res, selectionErrorStatus(err.code), { error: err.message, code: err.code })
                 return sendJson(res, 500, { error: err.message })
             }
+        }
+
+        // cancel a pending rerun pass without touching any running process
+        if (method === 'POST' && pathname === '/rerun/cancel') {
+            const pending = rerunController.getState().pending
+            rerunController.cancel('cancelled from the dashboard')
+            return sendJson(res, pending ? 202 : 409, {
+                cancelled: pending,
+                ...(pending ? {} : { error: 'No rerun pass is pending.', code: 'NOT_PENDING' })
+            })
         }
 
         // kill proc
@@ -646,6 +698,11 @@ const requestHandler = async (req, res) => {
             const body = await readJsonObject(req)
             const force = readForce(body)
             try {
+                // Mark the chain dead before signalling: this - not the exit code -
+                // is what tells the controller a human stopped the run. On Windows
+                // the tree is killed with taskkill, whose exit code is
+                // indistinguishable from a crash.
+                rerunController.cancel('stop requested')
                 const stopping = pm.stop({ force })
                 stopping.catch(() => {})
                 return sendJson(res, 202, { stopping: true, force })
@@ -659,8 +716,6 @@ const requestHandler = async (req, res) => {
         if (method === 'POST' && pathname === '/restart') {
             const body = await readJsonObject(req)
             const overrides = { force: readForce(body) }
-            let selectedAccount = null
-            let excludedAccounts = []
             if (body.args != null) overrides.args = body.args
             if (body.env != null) {
                 if (!ALLOW_ENV_OVERRIDES) {
@@ -671,25 +726,20 @@ const requestHandler = async (req, res) => {
                 overrides.env = body.env
             }
             try {
-                if (body.accountIndex != null && body.excludedAccountIndexes != null) {
-                    return sendJson(res, 400, {
-                        error: '`accountIndex` and `excludedAccountIndexes` cannot be used together.',
-                        code: 'BAD_REQUEST'
-                    })
-                }
-                if (body.accountIndex != null) {
-                    const selection = buildSingleAccountEnv(body.accountIndex)
+                const selection = startSelectionFor(body)
+                if (Object.keys(selection.env).length) {
                     overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    selectedAccount = selection.account
-                } else if (body.excludedAccountIndexes != null) {
-                    const selection = buildExcludedAccountsEnv(body.excludedAccountIndexes)
-                    overrides.env = { ...(overrides.env || {}), ...selection.env }
-                    excludedAccounts = selection.excludedAccounts
                 }
+                rerunController.noteExternalStart()
                 const info = await pm.restart(overrides)
-                return sendJson(res, 202, { restarted: true, selectedAccount, excludedAccounts, ...info })
+                return sendJson(res, 202, {
+                    restarted: true,
+                    selectedAccount: selection.selectedAccount,
+                    excludedAccounts: selection.excludedAccounts,
+                    ...info
+                })
             } catch (err) {
-                if (err.code === 'BAD_REQUEST') return sendJson(res, 400, { error: err.message, code: err.code })
+                if (err.code) return sendJson(res, selectionErrorStatus(err.code), { error: err.message, code: err.code })
                 return sendJson(res, 500, { error: err.message })
             }
         }
@@ -874,6 +924,7 @@ async function shutdown(signal, { force = false } = {}) {
     if (shuttingDown) return
     shuttingDown = true
     log('INFO', `${signal} received - shutting down.`)
+    rerunController.cancel('shutting down')
     server.close()
     try {
         if (pm.getStatus().state !== 'idle') {

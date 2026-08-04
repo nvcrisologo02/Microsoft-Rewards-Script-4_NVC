@@ -13,6 +13,69 @@ const CRON_FIELD_RANGES = [
     { min: 0, max: 7 } // day of week (7 == Sunday)
 ]
 
+export const AUTO_RERUN_LIMITS = {
+    delayMinutes: { min: 1, max: 120 },
+    maxPasses: { min: 1, max: 10 }
+}
+
+const AUTO_RERUN_FALLBACK = { enabled: true, delayMinutes: 5, maxPasses: 3 }
+
+function envBool(value, fallback) {
+    if (value === undefined || value === '') return fallback
+    return value !== 'false' && value !== '0'
+}
+
+function envInt(value, fallback, { min, max }) {
+    if (value === undefined || value === '') return fallback
+    const parsed = Number(value)
+    if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) return fallback
+    return parsed
+}
+
+/** autoRerun defaults, taken from the environment when no override file exists. */
+function autoRerunFromEnv(sourceEnv = process.env) {
+    return {
+        enabled: envBool(sourceEnv.AUTO_RERUN, AUTO_RERUN_FALLBACK.enabled),
+        delayMinutes: envInt(
+            sourceEnv.AUTO_RERUN_DELAY_MINUTES,
+            AUTO_RERUN_FALLBACK.delayMinutes,
+            AUTO_RERUN_LIMITS.delayMinutes
+        ),
+        maxPasses: envInt(sourceEnv.AUTO_RERUN_MAX_PASSES, AUTO_RERUN_FALLBACK.maxPasses, AUTO_RERUN_LIMITS.maxPasses)
+    }
+}
+
+/**
+ * Validates and normalizes an autoRerun object. `errorCode` distinguishes a
+ * corrupt persisted file from a bad request body, which the callers surface as
+ * different HTTP statuses.
+ */
+function normalizeAutoRerun(value, base, errorCode) {
+    const fail = message => {
+        throw Object.assign(new Error(message), { code: errorCode })
+    }
+    if (value === undefined) return { ...base }
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        fail('autoRerun must be an object.')
+    }
+
+    const next = { ...base }
+    if ('enabled' in value) {
+        if (typeof value.enabled !== 'boolean') fail('autoRerun.enabled must be a boolean.')
+        next.enabled = value.enabled
+    }
+    for (const key of ['delayMinutes', 'maxPasses']) {
+        if (!(key in value)) continue
+        const { min, max } = AUTO_RERUN_LIMITS[key]
+        const parsed = Number(value[key])
+        if (!Number.isSafeInteger(parsed) || parsed < min || parsed > max) {
+            fail(`autoRerun.${key} must be an integer between ${min} and ${max}.`)
+        }
+        next[key] = parsed
+    }
+    return next
+}
+
 function validateField(expr, { min, max }) {
     if (expr === '*') return true
     for (const part of expr.split(',')) {
@@ -78,6 +141,7 @@ export function readSchedule(projectRoot) {
         const cron = saved.cron == null ? null : saved.cron
         const skipIfRunning = saved.skipIfRunning === undefined ? true : saved.skipIfRunning
         const excludedAccountIndexes = saved.excludedAccountIndexes ?? []
+        const autoRerun = normalizeAutoRerun(saved.autoRerun, autoRerunFromEnv(), 'CORRUPT_SCHEDULE')
 
         if (typeof enabled !== 'boolean') {
             throw Object.assign(new Error('schedule.json has a non-boolean `enabled` value.'), {
@@ -113,6 +177,7 @@ export function readSchedule(projectRoot) {
             cron: cron?.trim() ?? null,
             skipIfRunning,
             excludedAccountIndexes: [...new Set(excludedAccountIndexes)].sort((a, b) => a - b),
+            autoRerun,
             updatedAt: saved.updatedAt || null,
             timezone: process.env.TZ || 'UTC',
             source: 'override'
@@ -123,6 +188,7 @@ export function readSchedule(projectRoot) {
         cron: process.env.CRON_SCHEDULE || null,
         skipIfRunning: true,
         excludedAccountIndexes: [],
+        autoRerun: autoRerunFromEnv(),
         updatedAt: null,
         timezone: process.env.TZ || 'UTC',
         source: 'env'
@@ -205,6 +271,9 @@ export function writeSchedule(projectRoot, patch) {
             })
         }
         next.excludedAccountIndexes = indexes.sort((a, b) => a - b)
+    }
+    if ('autoRerun' in patch) {
+        next.autoRerun = normalizeAutoRerun(patch.autoRerun, current.autoRerun, 'BAD_REQUEST')
     }
     if (next.enabled && !next.cron) {
         throw Object.assign(new Error('Cannot enable the schedule without a cron expression.'), { code: 'BAD_REQUEST' })
