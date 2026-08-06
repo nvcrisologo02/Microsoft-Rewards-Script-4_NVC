@@ -875,6 +875,25 @@ Email addresses are returned in full for the local dashboard. Passwords,
 recovery addresses, TOTP secrets, and separate proxy username/password values
 are not returned; the configured proxy URL and port are included in the summary.
 
+#### Chain aggregation
+
+Each history record carries a `chainId` (shared by every pass of one automatic
+rerun chain) and a `pass` number. This endpoint groups an account's records by
+chain before computing its stats, so `runs` counts chains rather than child
+processes and `lastCollected` is the whole chain's total.
+
+Without this, the figures would read the last pass of the chain — which is by
+construction the one that found nothing left — and report zero collected on
+almost every day.
+
+Records written before `chainId` existed carry none; each counts as a chain of
+one, so old history keeps reading correctly and needs no migration.
+
+`streakCounter` and `streakProtection` are resolved independently, each walking
+back to the most recent record that actually carries it. A record can carry the
+protection object with a null counter inside, and sharing one lookup would let
+it hide a counter that is still present a few records further back.
+
 **cURL**
 
 ```bash
