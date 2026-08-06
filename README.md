@@ -305,6 +305,7 @@ Edit `config.json` to customize behavior, or set `CONFIG_*` environment variable
 | `activities.searchOnBing` | boolean | `true`  | Complete ExploreOnBing offers                                   | `CONFIG_ACTIVITY_SEARCH_ON_BING` |
 | `activities.quiz`         | boolean | `true`  | Solve [quiz/puzzle activities](#quizzes-and-puzzles)            | `CONFIG_ACTIVITY_QUIZ`           |
 | `activities.linkOffers`   | boolean | `true`  | Claim ["Keep earning" daily offers](#keep-earning-daily-offers) | `CONFIG_ACTIVITY_LINK_OFFERS`    |
+| `activities.welcomeTour`  | boolean | `true`  | Claim the one-off welcome tour offer (50 pts, new accounts)     | `CONFIG_ACTIVITY_WELCOME_TOUR`   |
 
 ### Search Settings
 
