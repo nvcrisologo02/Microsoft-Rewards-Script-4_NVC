@@ -6,7 +6,6 @@ import type { DashboardData, PunchCard, BasePromotion } from '../interface/Dashb
 import type { AppDashboardData } from '../interface/AppDashBoardData'
 import type { QuestChild, ParentQuest } from '../browser/ReactFunc'
 import { reportOfferActivity } from './activities/api/ReportPromotion'
-import { welcomeTourOptions } from './activities/api/UrlRewardOptions'
 import { SearchQueryLedger } from './SearchQueryLedger'
 
 const MAX_SWEEP_OFFERS = 10
@@ -815,7 +814,8 @@ export class Workers {
                             `Found activity type "WelcomeTour" | title="${activity.title}" | offerId=${offerId}`
                         )
 
-                        await this.bot.activities.doUrlReward(basePromotion, welcomeTourOptions())
+                        const page = this.bot.isMobile ? this.bot.mainMobilePage : this.bot.mainDesktopPage
+                        await this.bot.activities.doWelcomeTour(basePromotion, page)
                         break
                     }
 

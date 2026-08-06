@@ -18,6 +18,7 @@ import { VisualSearch } from './activities/api/VisualSearch'
 import { Search as BrowserSearch } from './activities/browser/Search'
 import { SearchOnBing as BrowserSearchOnBing } from './activities/browser/SearchOnBing'
 import { Quiz } from './activities/Quiz'
+import { WelcomeTour } from './activities/browser/WelcomeTour'
 
 // Experimental
 import { Search as ApiSearch } from './activities/api/Search'
@@ -67,6 +68,11 @@ export default class Activities {
     doQuiz = async (promotion: BasePromotion, page: Page): Promise<void> => {
         const quiz = new Quiz(this.bot)
         await quiz.doQuiz(promotion, page)
+    }
+
+    doWelcomeTour = async (promotion: BasePromotion, page: Page): Promise<void> => {
+        const welcomeTour = new WelcomeTour(this.bot)
+        await welcomeTour.doWelcomeTour(promotion, page)
     }
 
     doClaimBonusPoints = async (): Promise<void> => {
