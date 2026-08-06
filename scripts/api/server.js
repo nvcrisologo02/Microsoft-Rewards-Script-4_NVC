@@ -102,6 +102,20 @@ pm.on('log', entry => {
     else process.stdout.write(line)
 })
 
+// Chains extra passes after a run so points that credit late - Bing daily
+// offers in particular - get picked up without a manual run.
+//
+// Attached before the history listener below so the record it writes already
+// sees this chain's id. The `?? entry.startedAt` fallback makes the outcome the
+// same either way, but the order should not be something a reader has to derive.
+const rerunController = new RerunController({
+    pm,
+    projectRoot,
+    readSchedule,
+    loadAccounts,
+    buildExcludedEnv: buildExcludedAccountsEnv
+}).attach()
+
 // Persist each completed run to disk so history survives API restarts.
 // Best-effort: a write failure here must never crash the server or the run.
 pm.on('run-complete', entry => {
@@ -112,20 +126,15 @@ pm.on('run-complete', entry => {
     }
 })
 
-// Chains extra passes after a run so points that credit late - Bing daily
-// offers in particular - get picked up without a manual run.
-const rerunController = new RerunController({
-    pm,
-    projectRoot,
-    readSchedule,
-    loadAccounts,
-    buildExcludedEnv: buildExcludedAccountsEnv
-}).attach()
-
 function toHistoryRecord(entry) {
     return {
         startedAt: entry.startedAt,
         endedAt: entry.endedAt,
+        // Passes of one rerun chain share a chainId, so the dashboard can show
+        // the chain as a single run. Records written before this existed have
+        // no chainId and each counts as a chain of one.
+        chainId: rerunController.getState().chainId ?? entry.startedAt,
+        pass: rerunController.getState().pass,
         exit: entry.exit,
         version: entry.run?.version ?? null,
         collected: entry.run?.collected ?? 0,

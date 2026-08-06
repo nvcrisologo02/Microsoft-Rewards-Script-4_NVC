@@ -6,6 +6,7 @@ import type { DashboardData, PunchCard, BasePromotion } from '../interface/Dashb
 import type { AppDashboardData } from '../interface/AppDashBoardData'
 import type { QuestChild, ParentQuest } from '../browser/ReactFunc'
 import { reportOfferActivity } from './activities/api/ReportPromotion'
+import { welcomeTourOptions } from './activities/api/UrlRewardOptions'
 import { SearchQueryLedger } from './SearchQueryLedger'
 
 const MAX_SWEEP_OFFERS = 10
@@ -790,6 +791,31 @@ export class Workers {
 
                         const page = this.bot.isMobile ? this.bot.mainMobilePage : this.bot.mainDesktopPage
                         await this.bot.activities.doQuiz(basePromotion, page)
+                        break
+                    }
+
+                    case 'welcometour': {
+                        const basePromotion = activity as BasePromotion
+
+                        // A config skip is a decision, not a gap: `continue`
+                        // keeps it out of the default branch and out of
+                        // ACTIVITY-GAPS.
+                        if (!this.bot.config.activities.welcomeTour) {
+                            this.bot.logger.info(
+                                this.bot.isMobile,
+                                'ACTIVITY',
+                                `Skipping "WelcomeTour" (disabled in config) | offerId=${offerId}`
+                            )
+                            continue
+                        }
+
+                        this.bot.logger.info(
+                            this.bot.isMobile,
+                            'ACTIVITY',
+                            `Found activity type "WelcomeTour" | title="${activity.title}" | offerId=${offerId}`
+                        )
+
+                        await this.bot.activities.doUrlReward(basePromotion, welcomeTourOptions())
                         break
                     }
 

@@ -150,6 +150,44 @@ export function buildExcludedAccountsEnv(excludedAccountIndexes, sourceEnv = pro
     }
 }
 
+/**
+ * Groups an account's per-pass records into chains before its stats are computed.
+ *
+ * A rerun chain runs the same account several times, and its last pass is by
+ * construction the one that finds nothing left - so reading only the most recent
+ * record reports zero collected on almost every day. Records written before
+ * chainId existed carry none, and each counts as a chain of one.
+ */
+function groupIntoChains(results) {
+    const chains = []
+    const byChainId = new Map()
+
+    for (const result of results) {
+        const key = result.chainId ?? null
+        if (key == null) {
+            chains.push([result])
+            continue
+        }
+        const existing = byChainId.get(key)
+        if (existing) {
+            existing.push(result)
+            continue
+        }
+        const chain = [result]
+        byChainId.set(key, chain)
+        chains.push(chain)
+    }
+
+    // Each chain arrives newest-pass-first, matching the newest-first input.
+    return chains.map(passes => ({
+        when: passes[0]?.when ?? null,
+        collected: passes.reduce((sum, pass) => sum + (pass.collected || 0), 0),
+        balance: passes.find(pass => pass.balance != null)?.balance ?? null,
+        success: passes[0]?.success ?? null,
+        error: passes[0]?.error ?? null
+    }))
+}
+
 export function mergeAccountStats(accounts, runs) {
     // Index history results by email.
     const byEmail = new Map()
@@ -157,22 +195,30 @@ export function mergeAccountStats(accounts, runs) {
         const when = run.endedAt || run.startedAt || null
         for (const acc of run.accounts || []) {
             if (!byEmail.has(acc.email)) byEmail.set(acc.email, [])
-            byEmail.get(acc.email).push({ ...acc, when })
+            byEmail.get(acc.email).push({ ...acc, when, chainId: run.chainId ?? null })
         }
     }
 
     return accounts.map(a => {
         const results = byEmail.get(a.emailKey) || [] // already most-recent-first
-        const last = results[0] || null
+        const chains = groupIntoChains(results)
+        const last = chains[0] || null
+
+        // Two independent lookups on purpose. Sharing one would let a record
+        // that carries the protection object with a null counter inside hide a
+        // counter that is still there, a few records further back.
         const streakProtection = results.find(result => result.streakProtection != null)?.streakProtection ?? null
+        const streakCounter =
+            results.find(result => result.streakProtection?.streakCounter != null)?.streakProtection?.streakCounter ??
+            null
 
         let totalCollected = 0
-        for (const r of results) totalCollected += r.collected || 0
+        for (const chain of chains) totalCollected += chain.collected || 0
 
-        // Consecutive successes from the most recent run backwards.
+        // Consecutive successful chains from the most recent backwards.
         let successStreak = 0
-        for (const r of results) {
-            if (r.success === true) successStreak++
+        for (const chain of chains) {
+            if (chain.success === true) successStreak++
             else break
         }
 
@@ -180,7 +226,7 @@ export function mergeAccountStats(accounts, runs) {
         void emailKey
         return {
             ...safe,
-            runs: results.length,
+            runs: chains.length,
             totalCollected,
             successStreak,
             lastRunAt: last?.when ?? null,
@@ -190,8 +236,8 @@ export function mergeAccountStats(accounts, runs) {
             lastError: last?.error ?? null,
             streakProtection,
             // Microsoft's real daily streak counter (from the rewards snapshot),
-            // distinct from successStreak which counts consecutive successful runs.
-            streakCounter: streakProtection?.streakCounter ?? null
+            // distinct from successStreak which counts consecutive successful chains.
+            streakCounter
         }
     })
 }

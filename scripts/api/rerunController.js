@@ -73,6 +73,7 @@ export class RerunController extends EventEmitter {
         this.clearTimer = clearTimer
 
         this.pass = 1
+        this.chainId = null
         this.maxPasses = null
         this.cancelled = false
         this._timer = null
@@ -89,6 +90,7 @@ export class RerunController extends EventEmitter {
         return {
             pending: this._timer != null,
             pass: this.pass,
+            chainId: this.chainId,
             maxPasses: this.maxPasses,
             nextPassAt: this._nextPassAt,
             accountIndexes: [...this._pendingIndexes]
@@ -99,6 +101,7 @@ export class RerunController extends EventEmitter {
     noteExternalStart() {
         this._clearPending()
         this.pass = 1
+        this.chainId = null
         this.cancelled = false
         this.emit('change')
     }
@@ -128,6 +131,12 @@ export class RerunController extends EventEmitter {
 
     _onRunComplete(entry) {
         try {
+            // The first pass of a chain names it. Later passes inherit the id,
+            // which is what lets the dashboard aggregate them as one run.
+            if (this.chainId == null && typeof entry?.startedAt === 'string') {
+                this.chainId = entry.startedAt
+            }
+
             let schedule
             try {
                 schedule = this.readSchedule(this.projectRoot)

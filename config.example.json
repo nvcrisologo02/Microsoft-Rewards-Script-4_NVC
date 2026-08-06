@@ -30,7 +30,8 @@
         "urlReward": true,
         "searchOnBing": true,
         "quiz": true,
-        "linkOffers": true
+        "linkOffers": true,
+        "welcomeTour": true
     },
     "searchOnBingLocalQueries": false,
     "globalTimeout": "30sec",

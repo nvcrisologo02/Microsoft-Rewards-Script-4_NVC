@@ -76,6 +76,7 @@ export interface ConfigActivities {
     searchOnBing: boolean
     quiz: boolean
     linkOffers: boolean
+    welcomeTour: boolean
 }
 
 // Webhooks

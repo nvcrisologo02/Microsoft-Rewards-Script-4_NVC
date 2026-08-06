@@ -7,6 +7,7 @@ import { AppReward } from './activities/app/AppReward'
 
 // API
 import { UrlReward } from './activities/api/UrlReward'
+import type { UrlRewardOptions } from './activities/api/UrlRewardOptions'
 import { ClaimBonusPoints } from './activities/api/ClaimBonusPoints'
 import { EnsureStreakProtection } from './activities/api/EnsureStreakProtection'
 import { ClaimReward } from './activities/api/ClaimReward'
@@ -58,9 +59,9 @@ export default class Activities {
     }
 
     // API
-    doUrlReward = async (promotion: BasePromotion): Promise<void> => {
+    doUrlReward = async (promotion: BasePromotion, options?: UrlRewardOptions): Promise<void> => {
         const urlReward = new UrlReward(this.bot)
-        await urlReward.doUrlReward(promotion)
+        await urlReward.doUrlReward(promotion, options)
     }
 
     doQuiz = async (promotion: BasePromotion, page: Page): Promise<void> => {

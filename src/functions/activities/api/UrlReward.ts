@@ -1,20 +1,23 @@
 import type { BasePromotion } from '../../../interface/DashboardData'
 import { Workers } from '../../Workers'
 import { reportOfferActivity } from './ReportPromotion'
+import type { UrlRewardOptions } from './UrlRewardOptions'
 
 export class UrlReward extends Workers {
-    public async doUrlReward(promotion: BasePromotion) {
-        await this.runUrlReward(promotion, true)
+    public async doUrlReward(promotion: BasePromotion, options: UrlRewardOptions = {}) {
+        await this.runUrlReward(promotion, true, options)
     }
 
-    private async runUrlReward(promotion: BasePromotion, allowSessionRepair: boolean) {
+    private async runUrlReward(promotion: BasePromotion, allowSessionRepair: boolean, options: UrlRewardOptions = {}) {
         const offerId = promotion.offerId
+        const tag = options.tag ?? 'URL-REWARD'
+        const source = options.source ?? 'activity'
 
         const actionId = this.bot.nextActions.reportActivity
         if (!actionId) {
             this.bot.logger.warn(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Skipping ${offerId}: "reportActivity" not discovered in bundle`
             )
             return
@@ -24,7 +27,7 @@ export class UrlReward extends Workers {
         if (!live) {
             this.bot.logger.warn(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Skipping ${offerId}: not present in page snapshot, even after refetching /earn and /dashboard`
             )
             return
@@ -32,7 +35,7 @@ export class UrlReward extends Workers {
         if (!live.reportable) {
             this.bot.logger.warn(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Skipping ${offerId}: not reportable (completed/locked/no-hash/future-dated)`
             )
             return
@@ -41,7 +44,7 @@ export class UrlReward extends Workers {
         if (this.bot.config.skipNonPointTasks && this.isNonCrediting(live.points, live.promotionSubtype, live.title)) {
             this.bot.logger.info(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Skipping ${offerId}: awards no points (points=${live.points}${live.promotionSubtype ? ` subtype=${live.promotionSubtype}` : ''}) - likely a free trial/non-crediting offer. Set skipNonPointTasks=false to attempt anyway.`
             )
             return
@@ -52,16 +55,16 @@ export class UrlReward extends Workers {
 
         this.bot.logger.info(
             this.bot.isMobile,
-            'URL-REWARD',
-            `Starting UrlReward | offerId=${offerId} | geo=${this.bot.userData.geoLocale} | currentBalance=${oldBalance}`
+            tag,
+            `Starting ${tag} | offerId=${offerId} | geo=${this.bot.userData.geoLocale} | currentBalance=${oldBalance}`
         )
 
         try {
-            const { status, acknowledged, gained: gainedPoints, newBalance } = await reportOfferActivity(this.bot, live, promotion)
+            const { status, acknowledged, gained: gainedPoints, newBalance } = await reportOfferActivity(this.bot, live, promotion, source)
 
             this.bot.logger.debug(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Response | offerId=${offerId} | status=${status} | acknowledged=${acknowledged} | pointsGained=${gainedPoints} | currentBalance=${newBalance}`
             )
 
@@ -69,33 +72,33 @@ export class UrlReward extends Workers {
                 const shortfall = expectedPoints > 0 && gainedPoints < expectedPoints
                 this.bot.logger.info(
                     this.bot.isMobile,
-                    'URL-REWARD',
-                    `Completed UrlReward | offerId=${offerId} | pointsGained=${gainedPoints} | currentBalance=${newBalance}${shortfall ? ' | WARNING: credited less than advertised' : ''}`,
+                    tag,
+                    `Completed ${tag} | offerId=${offerId} | pointsGained=${gainedPoints} | currentBalance=${newBalance}${shortfall ? ' | WARNING: credited less than advertised' : ''}`,
                     'green'
                 )
             } else if (acknowledged && expectedPoints === 0) {
                 this.bot.logger.info(
                     this.bot.isMobile,
-                    'URL-REWARD',
-                    `Completed UrlReward (no points by design) | offerId=${offerId} | acknowledged=true | pointsGained=0 | currentBalance=${newBalance}`,
+                    tag,
+                    `Completed ${tag} (no points by design) | offerId=${offerId} | acknowledged=true | pointsGained=0 | currentBalance=${newBalance}`,
                     'green'
                 )
             } else {
                 this.bot.logger.warn(
                     this.bot.isMobile,
-                    'URL-REWARD',
-                    `UrlReward credited no points | offerId=${offerId} | acknowledged=${acknowledged} | expected=${expectedPoints} | pointsGained=0 | currentBalance=${newBalance}`
+                    tag,
+                    `${tag} credited no points | offerId=${offerId} | acknowledged=${acknowledged} | expected=${expectedPoints} | pointsGained=0 | currentBalance=${newBalance}`
                 )
 
                 if (allowSessionRepair && !acknowledged && expectedPoints > 0 && this.bot.currentSessionWasRestored) {
-                    const repaired = await this.bot.repairCurrentBrowserSession(`URL-REWARD:${offerId}`)
+                    const repaired = await this.bot.repairCurrentBrowserSession(`${tag}:${offerId}`)
                     if (repaired) {
                         this.bot.logger.info(
                             this.bot.isMobile,
-                            'URL-REWARD',
-                            `Retrying UrlReward once with the refreshed session | offerId=${offerId}`
+                            tag,
+                            `Retrying ${tag} once with the refreshed session | offerId=${offerId}`
                         )
-                        await this.runUrlReward(promotion, false)
+                        await this.runUrlReward(promotion, false, options)
                         return
                     }
                 }
@@ -105,7 +108,7 @@ export class UrlReward extends Workers {
         } catch (error) {
             this.bot.logger.error(
                 this.bot.isMobile,
-                'URL-REWARD',
+                tag,
                 `Error in doUrlReward | offerId=${offerId} | message=${error instanceof Error ? error.message : String(error)}`
             )
         }
