@@ -232,6 +232,16 @@ Some offers appear in the `/earn` React snapshot with a live hash but never show
 
 Quests are solved from their own quest page. When a quest page renders no actionable children but the API punchcard data still carries incomplete children (as "Keep earning" does), those children are dispatched through the normal activity dispatcher instead of being dropped. Log tag: `PUNCHCARD`. Reward claiming is gated by `autoClaimPunchcardRewards`.
 
+### Welcome tour
+
+`welcometour` (`Gamification_FRE_Offer6nonwindows`, 50 points) is the one-off onboarding tour Rewards offers a newly created account, and it appears on mobile only. Log tag: `WELCOME-TOUR`.
+
+Unlike every other dashboard promotion, this offer is **absent from the `/earn` snapshot**, so there is no hash to report with and the server action cannot claim it. The flow therefore tries the server action first — free, and it self-heals if Microsoft ever starts including the offer — and otherwise navigates to the promotion's `destinationUrl`, settles, and checks the points delta.
+
+When visiting does not credit, the warning line carries the final URL, the page title and any tour containers found, which is what a follow-up needs in order to click through the tour rather than guess at it.
+
+Gated by `activities.welcomeTour`.
+
 ### Reading the run for problems
 
 Two log tags help spot when Rewards changes something under you:
