@@ -311,3 +311,40 @@ test('the schedule is re-read at fire time so a mid-cooldown pause takes effect'
 
     assert.equal(pm.starts[0].env.EXCLUDED, '1,3', 'account 1 was paused during the cooldown')
 })
+
+const CHAIN_START = {
+    startedAt: '2026-08-05T05:49:00.000Z',
+    endedAt: '2026-08-05T09:54:00.000Z',
+    exit: { code: 0 },
+    run: { accounts: [acc('uno@example.com', { collectedPoints: 30 })] }
+}
+
+test('la primera pasada fija el chainId a su propio startedAt', () => {
+    const { pm, controller } = makeHarness()
+    pm.emit('run-complete', CHAIN_START)
+    assert.equal(controller.getState().chainId, '2026-08-05T05:49:00.000Z')
+})
+
+test('las pasadas siguientes heredan el chainId de la primera', () => {
+    const { pm, controller, fire } = makeHarness()
+    pm.emit('run-complete', CHAIN_START)
+    fire()
+    pm.emit('run-complete', {
+        startedAt: '2026-08-05T09:59:00.000Z',
+        endedAt: '2026-08-05T10:24:00.000Z',
+        exit: { code: 0 },
+        run: { accounts: [acc('uno@example.com', { collectedPoints: 20 })] }
+    })
+    assert.equal(controller.getState().chainId, '2026-08-05T05:49:00.000Z')
+    assert.equal(controller.getState().pass, 2)
+})
+
+test('noteExternalStart estrena cadena', () => {
+    const { pm, controller } = makeHarness()
+    pm.emit('run-complete', CHAIN_START)
+    assert.equal(controller.getState().chainId, '2026-08-05T05:49:00.000Z')
+
+    controller.noteExternalStart()
+    assert.equal(controller.getState().chainId, null)
+    assert.equal(controller.getState().pass, 1)
+})
