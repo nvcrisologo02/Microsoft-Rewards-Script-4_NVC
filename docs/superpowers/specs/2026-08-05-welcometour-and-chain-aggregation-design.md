@@ -134,13 +134,20 @@ la última, así que una cadena entera con contadores nulos tampoco lo esconde.
 - `streakProtection` y `streakCounter` se resuelven de forma independiente
 - `totalCollected` no varía al reagrupar
 
-Sobre el despacho del welcometour, en `src/functions`:
+Sobre el welcometour, en `src/functions/WelcomeTour.test.ts`:
 
-- un `welcometour` se enruta al camino de reporte con `source: 'welcomeTour'`
-- con `activities.welcomeTour` en `false` se salta y **no** cuenta como tipo no
-  soportado en `ACTIVITY-GAPS`, porque saltarlo es una decisión, no un hueco
-- `doUrlReward` sin opciones conserva `source: 'activity'` y la etiqueta
-  `URL-REWARD`
+- el origen de atribución es `welcomeTour` y la etiqueta `WELCOME-TOUR`
+- ese origen no es el genérico `activity`, que es lo que permite distinguirlo en
+  el desglose `bySource`
+
+El despacho en sí —que el `case 'welcometour'` enrute al camino de reporte y que
+con el flag desactivado haga `continue` en vez de caer en `default` y contarse
+como hueco en `ACTIVITY-GAPS`— no se cubre con prueba unitaria: ejercitar ese
+`switch` exige instanciar el bot entero con navegador y sesión. Queda cubierto
+por revisión del código y, sobre todo, por el log del primer run: si aparece
+`Found activity type "WelcomeTour"` y `welcometour` desaparece de
+`ACTIVITY-GAPS`, el despacho funciona. La atribución propia existe precisamente
+para que ese log sea concluyente.
 
 Sobre el `chainId`, en `scripts/api/rerunController.test.js`:
 
