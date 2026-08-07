@@ -9,6 +9,11 @@ import { EventEmitter } from 'node:events'
  * pending - Bing daily offers in particular credit asynchronously, after the
  * account has already been closed) or when it failed outright (it almost
  * certainly left points untouched, and nothing retries it today).
+ *
+ * A run killed mid-account (the child died before logging ACCOUNT-END or
+ * ACCOUNT-ERROR) leaves that account with no outcome at all, which is neither
+ * of the two. Only a run that never reached RUN-END may treat that silence as
+ * a failure, so a clean run keeps ignoring accounts it deliberately skipped.
  */
 export function decideNextPass({
     runAccounts = [],
@@ -16,7 +21,8 @@ export function decideNextPass({
     excludedAccountIndexes = [],
     autoRerun,
     pass = 1,
-    cancelled = false
+    cancelled = false,
+    runFinished = true
 }) {
     const delayMs = Math.max(1, autoRerun?.delayMinutes ?? 5) * 60_000
     const nothing = reason => ({ shouldRerun: false, accountIndexes: [], delayMs, reason })
@@ -35,7 +41,8 @@ export function decideNextPass({
             runAccounts
                 .filter(account => {
                     const gained = account?.collectedPoints ?? account?.live?.gained ?? 0
-                    return gained > 0 || account?.success === false
+                    const interrupted = !runFinished && account?.success == null
+                    return gained > 0 || account?.success === false || interrupted
                 })
                 .map(account => indexByEmail.get(String(account?.email ?? '').toLowerCase()))
                 .filter(index => index !== undefined && !paused.has(index))
@@ -155,6 +162,9 @@ export class RerunController extends EventEmitter {
                 excludedAccountIndexes: schedule.excludedAccountIndexes ?? [],
                 autoRerun: schedule.autoRerun,
                 pass: this.pass,
+                // No RUN-END means the child died mid-run; the account it was on
+                // never got to report an outcome and would otherwise be dropped.
+                runFinished: entry?.run?.finished !== false,
                 // A signalled exit means something killed the child - a container
                 // shutdown, or a stop on a platform where the explicit cancel
                 // never reached us. Either way, do not chain another pass.

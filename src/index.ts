@@ -20,6 +20,8 @@ import { checkNodeVersion } from './util/Validator'
 import { runScheduled } from './util/Scheduler'
 import { formatRunSummary, formatPointsBySource } from './util/RunSummary'
 import { EarningsHistory, ZERO_STREAK_ALERT_THRESHOLD } from './util/EarningsHistory'
+import { installTlsPeerCertificateGuard } from './util/TlsGuard'
+import { fatalErrorGuard } from './util/FatalErrorGuard'
 
 import { Login } from './browser/auth/Login'
 import { Workers } from './functions/Workers'
@@ -36,6 +38,10 @@ import { sendEmail, emailEnabled } from './logging/Email'
 import type { DashboardData } from './interface/DashboardData'
 import type { AppDashboardData } from './interface/AppDashBoardData'
 import type { AppEarnablePoints } from './interface/Points'
+
+// At module scope, not inside main(): cluster.fork() re-runs this file, and the guard must
+// be in place before the first page.request.* call in either the primary or a worker.
+installTlsPeerCertificateGuard()
 
 interface ExecutionContext {
     isMobile: boolean
@@ -547,16 +553,19 @@ export class MicrosoftRewardsBot {
 
                 this.http = new HttpClient(account.proxy)
 
-                const result: { initialPoints: number; collectedPoints: number } | undefined = await this.Main(
-                    account
-                ).catch(error => {
-                    void this.logger.error(
-                        true,
-                        'FLOW',
-                        `Mobile flow failed for ${accountEmail}: ${error instanceof Error ? error.message : String(error)}`
+                // Guarded so that an error escaping into the event loop fails this account
+                // instead of the whole run; the catch below only sees the flow's own errors.
+                const result: { initialPoints: number; collectedPoints: number } | undefined =
+                    await fatalErrorGuard.guard(
+                        this.Main(account).catch(error => {
+                            void this.logger.error(
+                                true,
+                                'FLOW',
+                                `Mobile flow failed for ${accountEmail}: ${error instanceof Error ? error.message : String(error)}`
+                            )
+                            return undefined
+                        })
                     )
-                    return undefined
-                })
 
                 const durationSeconds = ((Date.now() - accountStartTime) / 1000).toFixed(1)
 
@@ -581,6 +590,11 @@ export class MicrosoftRewardsBot {
                         'green'
                     )
                 } else {
+                    // The API only learns an account failed from ACCOUNT-ERROR. Without this
+                    // line a failed flow reads as "no outcome recorded" and the rerun chain
+                    // skips the account instead of retrying it.
+                    this.logger.error('main', 'ACCOUNT-ERROR', `${accountEmail}: Flow failed`)
+
                     accountStats.push({
                         email: accountEmail,
                         initialPoints: 0,
@@ -1003,7 +1017,16 @@ async function main(): Promise<void> {
             )
             return
         }
-        rewardsBot.logger.error('main', 'UNCAUGHT-EXCEPTION', error)
+        const fatal = error instanceof Error ? error : new Error(String(error))
+        if (fatalErrorGuard.report(fatal)) {
+            rewardsBot.logger.warn(
+                'main',
+                'UNCAUGHT-EXCEPTION',
+                `Failing the account in flight instead of the whole run | ${fatal.message}`
+            )
+            return
+        }
+        rewardsBot.logger.error('main', 'UNCAUGHT-EXCEPTION', fatal)
         await flushAllWebhooks()
         process.exit(1)
     })
@@ -1016,7 +1039,16 @@ async function main(): Promise<void> {
             )
             return
         }
-        rewardsBot.logger.error('main', 'UNHANDLED-REJECTION', reason as Error)
+        const fatal = reason instanceof Error ? reason : new Error(String(reason))
+        if (fatalErrorGuard.report(fatal)) {
+            rewardsBot.logger.warn(
+                'main',
+                'UNHANDLED-REJECTION',
+                `Failing the account in flight instead of the whole run | ${fatal.message}`
+            )
+            return
+        }
+        rewardsBot.logger.error('main', 'UNHANDLED-REJECTION', fatal)
         await flushAllWebhooks()
         process.exit(1)
     })
