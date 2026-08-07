@@ -57,6 +57,24 @@ test('an account that failed with zero points is still retried', () => {
     assert.deepEqual(result.accountIndexes, [2])
 })
 
+test('an account left without an outcome is retried when the run never finished', () => {
+    const result = decide({
+        runAccounts: [acc('dos@example.com', { success: null, collectedPoints: null })],
+        runFinished: false
+    })
+    assert.equal(result.shouldRerun, true)
+    assert.deepEqual(result.accountIndexes, [2])
+})
+
+test('a run that reached RUN-END does not retry accounts on a missing outcome alone', () => {
+    const result = decide({
+        runAccounts: [acc('dos@example.com', { success: null, collectedPoints: null })],
+        runFinished: true
+    })
+    assert.equal(result.shouldRerun, false)
+    assert.equal(result.reason, 'nothing-pending')
+})
+
 test('live.gained counts when the ACCOUNT-END line never arrived', () => {
     const result = decide({
         runAccounts: [
